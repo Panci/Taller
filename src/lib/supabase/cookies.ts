@@ -11,7 +11,8 @@ export function opcionesCookie(https: boolean) {
 }
 
 export function datosSupabase(): { url: string; clave: string } | null {
-  const url = process.env.SUPABASE_URL?.trim();
-  const clave = process.env.SUPABASE_PUBLISHABLE_KEY?.trim();
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
+  const clave = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim();
   return url && clave ? { url, clave } : null;
 }
+

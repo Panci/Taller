@@ -28,8 +28,8 @@ function preguntar(texto: string, oculto = false): Promise<string> {
 
 async function principal() {
   const lineas = leerLineas() as string[];
-  const url = process.env.SUPABASE_URL || valorDe(lineas, 'SUPABASE_URL');
-  const clave = process.env.SUPABASE_PUBLISHABLE_KEY || valorDe(lineas, 'SUPABASE_PUBLISHABLE_KEY');
+  const url = process.env.SUPABASE_URL || valorDe(lineas, 'SUPABASE_URL') || process.env.NEXT_PUBLIC_SUPABASE_URL || valorDe(lineas, 'NEXT_PUBLIC_SUPABASE_URL');
+  const clave = process.env.SUPABASE_PUBLISHABLE_KEY || valorDe(lineas, 'SUPABASE_PUBLISHABLE_KEY') || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || valorDe(lineas, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
   if (!url || !clave) {
     console.error('Faltan SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en .env.local.');
     process.exit(1);
