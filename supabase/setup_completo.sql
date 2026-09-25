@@ -703,6 +703,16 @@ begin
     values (v_asistente_id, v_asistente_id, json_build_object('sub', v_asistente_id::text, 'email', 'asistente@taller.invalid'), 'email', v_asistente_id::text, now(), now(), now());
   end if;
 
+  -- Inicializar campos de token en '' para compatibilidad con Supabase GoTrue
+  update auth.users
+  set confirmation_token = coalesce(confirmation_token, ''),
+      recovery_token = coalesce(recovery_token, ''),
+      email_change_token_new = coalesce(email_change_token_new, ''),
+      email_change = coalesce(email_change, ''),
+      email_change_token_current = coalesce(email_change_token_current, ''),
+      phone_change = coalesce(phone_change, ''),
+      phone_change_token = coalesce(phone_change_token, ''),
+      reauthentication_token = coalesce(reauthentication_token, '');
 end $$;
 
 -- 10. Bloquear altas externas en auth.users
