@@ -15,7 +15,8 @@ import type { Conversacion, EstadoOrden, Orden, PersonaId, Pieza, ServicioTarifa
 import type { Db } from '../supabase/servidor';
 import { cabeceraConversacion, leerConversacion, leerTarifa } from '../datos';
 import { totalOrden } from '../calculos';
-import { ESTADOS, ESTADOS_PIEZA, persona, PERSONAS, TALLER } from '../constantes';
+import { ESTADOS, ESTADOS_PIEZA, persona, PERSONAS, TALLER, huecosActivos } from '../constantes';
+import { leerHorarioTaller } from '../ajustes';
 import { codigosOrdenEn, eur, formatearMatricula, matriculasEn, primerNombre } from '../formato';
 import { fmtCabecera, fmtDiaLargo, fmtDiaMedio, fmtFecha, horaCorta, horaDe } from '../fechas';
 import {
@@ -184,7 +185,7 @@ function contexto(c: Conversacion, v: Verificacion, tarifa: ServicioTarifa[], hu
   return [
     `FECHA Y HORA ACTUAL: ${fmtCabecera()}, ${horaDe(new Date())} (hora de Madrid)`,
     `TARIFA (IVA incluido):\n${lineasTarifa}`,
-    `HUECOS LIBRES PARA DEJAR EL COCHE (entradas por la mañana, de lunes a viernes):\n${libres}`,
+    `HUECOS LIBRES PARA DEJAR EL COCHE (entradas de lunes a viernes, mañana y tarde):\n${libres}`,
     textoOrdenVerificada(v),
     `CONVERSACIÓN (lo más reciente al final):\n${conversacion}`,
     'Contesta al último mensaje del cliente.',
@@ -214,7 +215,8 @@ function lista(xs: string[]): string {
 }
 
 async function ofrecerHuecos(db: Db): Promise<string> {
-  const libres = await huecosLibres(db, 3);
+  const horario = await leerHorarioTaller(db);
+  const libres = await huecosLibres(db, 3, 12, huecosActivos(horario));
   if (!libres.length) return 'Ahora mismo no me quedan huecos libres en los próximos días.';
   return `Te puedo ofrecer ${lista(libres.map((h) => `el ${fmtDiaMedio(h.fecha)} a las ${horaCorta(h.hora)}`))}. ¿Cuál te viene bien?`;
 }
@@ -238,7 +240,8 @@ async function intentarReserva(db: Db, c: Conversacion, r: Respuesta): Promise<v
   }
   const fecha = (cita.fecha ?? '').slice(0, 10);
   const hora = (cita.hora ?? '').replace(/^(\d):/, '0$1:').slice(0, 5);
-  const libre = (await huecosLibres(db, 60, 30)).some((h) => h.fecha === fecha && h.hora === hora);
+  const horario = await leerHorarioTaller(db);
+  const libre = (await huecosLibres(db, 60, 30, huecosActivos(horario))).some((h) => h.fecha === fecha && h.hora === hora);
   if (!libre) {
     await respuestaIA(db, c.id, `Ese hueco no lo tengo libre. ${await ofrecerHuecos(db)}`);
     return;
@@ -275,7 +278,8 @@ export async function atenderConversacion(db: Db, id: string): Promise<void> {
   const v = await verificarOrden(db, c);
   if (v.codigos.length > MAX_CODIGOS) return pasarAPersona(db, c.id, 'Ha dado muchos códigos de orden distintos', TEXTO_MUCHOS_CODIGOS);
 
-  const [tarifa, huecos] = await Promise.all([leerTarifa(db), huecosLibres(db, 12)]);
+  const [tarifa, horario] = await Promise.all([leerTarifa(db), leerHorarioTaller(db)]);
+  const huecos = await huecosLibres(db, 12, 12, huecosActivos(horario));
   await marcarPensando(db, c.id, true);
   let r: Respuesta;
   try {

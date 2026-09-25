@@ -56,8 +56,31 @@ export function nombrePersona(id: PersonaId | string): string {
   return persona(id)?.nombre ?? String(id);
 }
 
-/** Entradas de coches: 4 huecos cada mañana, de lunes a viernes. */
-export const HUECOS = ['08:30', '09:00', '09:30', '10:00'];
+/** Entradas de coches: huecos de mañana y tarde, de lunes a viernes. */
+export const HUECOS_MANANA = ['08:30', '09:00', '09:30', '10:00'];
+export const HUECOS_TARDE = ['15:30', '16:00', '16:30', '17:00'];
+export const HUECOS = [...HUECOS_MANANA, ...HUECOS_TARDE];
+
+export interface HorarioTaller {
+  tardeActiva: boolean;
+  huecosManana: string[];
+  huecosTarde: string[];
+}
+
+export const HORARIO_DEFECTO: HorarioTaller = {
+  tardeActiva: true,
+  huecosManana: HUECOS_MANANA,
+  huecosTarde: HUECOS_TARDE,
+};
+
+export function huecosActivos(horario?: Partial<HorarioTaller> | null): string[] {
+  const h = { ...HORARIO_DEFECTO, ...horario };
+  const lista = [...(h.huecosManana ?? HUECOS_MANANA)];
+  if (h.tardeActiva) {
+    lista.push(...(h.huecosTarde ?? HUECOS_TARDE));
+  }
+  return [...new Set(lista)].sort();
+}
 
 /** A partir de estos días en el taller, el tablero lo marca en rojo. */
 export const DIAS_ALERTA = 5;

@@ -7,7 +7,8 @@
 import { refresh } from 'next/cache';
 import { z } from 'zod';
 import type { EstadoId, EstadoPieza, InformeCliente, InformeInterno, Persona, PersonaId, Propuesta, Resultado } from '@/lib/tipos';
-import { PERSONAS } from '@/lib/constantes';
+import { type HorarioTaller, PERSONAS } from '@/lib/constantes';
+import { guardarHorarioTaller } from '@/lib/ajustes';
 import { dbSesion, personaActual } from '@/lib/sesion';
 import { puedeEditarTarifa, puedeTocarOrden } from '@/lib/permisos';
 import { cochePorMatricula, leerOrden, leerTarifa, ordenAbiertaDe } from '@/lib/datos';
@@ -240,6 +241,25 @@ export async function reservarCitaAccion(d: op.DatosCita): Promise<Resultado> {
   return ejecutar(esEscritorio, async (_a, db) => {
     const c = await op.reservarCita(db, d, 'taller');
     return { ok: true, id: c.id, mensaje: 'Cita reservada.' };
+  });
+}
+
+export async function actualizarCitaAccion(id: string, d: op.DatosCita): Promise<Resultado> {
+  return ejecutar(esEscritorio, async (_a, db) => {
+    const c = await op.actualizarCita(db, id, d);
+    return { ok: true, id: c.id, mensaje: 'Cita actualizada correctamente.' };
+  });
+}
+
+export async function guardarHorariosAccion(horario: HorarioTaller): Promise<Resultado> {
+  return ejecutar(esEscritorio, async (_a, db) => {
+    const r = await guardarHorarioTaller(db, horario);
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? 'Horarios guardados en la base de datos.'
+        : 'Horarios actualizados en tu navegador.',
+    };
   });
 }
 

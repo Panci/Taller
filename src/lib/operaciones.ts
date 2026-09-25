@@ -503,7 +503,7 @@ export interface DatosCita {
  */
 export async function reservarCita(db: Db, d: DatosCita, origen: Cita['origen']): Promise<Cita> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.fecha) || !esLaborable(d.fecha)) throw new ErrorNegocio('Las citas son de lunes a viernes.');
-  if (!HUECOS.includes(d.hora)) throw new ErrorNegocio(`Las entradas son a las ${HUECOS.join(', ')}.`);
+  if (!/^\d{2}:\d{2}$/.test(d.hora)) throw new ErrorNegocio('La hora debe tener formato HH:MM (ej. 09:30 o 16:00).');
   if (d.fecha < hoy()) throw new ErrorNegocio('Ese día ya ha pasado.');
   const ocupados = await huecosOcupados(db, d.fecha, d.fecha);
   if (ocupados.has(`${d.fecha} ${d.hora}`)) throw new ErrorNegocio('Ese hueco ya está cogido.');
@@ -530,6 +530,34 @@ export async function reservarCita(db: Db, d: DatosCita, origen: Cita['origen'])
   return c;
 }
 
+export async function actualizarCita(db: Db, id: string, d: DatosCita): Promise<Cita> {
+  const c = await leerCita(db, id);
+  if (!c) throw new ErrorNegocio('Esa cita ya no existe.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.fecha) || !esLaborable(d.fecha)) throw new ErrorNegocio('Las citas son de lunes a viernes.');
+  if (!/^\d{2}:\d{2}$/.test(d.hora)) throw new ErrorNegocio('La hora debe tener formato HH:MM (ej. 09:30 o 16:00).');
+  if (d.fecha < hoy() && d.fecha !== c.fecha) throw new ErrorNegocio('No se puede mover la cita a un día pasado.');
+  if (d.fecha !== c.fecha || d.hora !== c.hora) {
+    const ocupados = await huecosOcupados(db, d.fecha, d.fecha);
+    if (ocupados.has(`${d.fecha} ${d.hora}`)) throw new ErrorNegocio('Ese hueco ya está ocupado por otra cita.');
+  }
+  const nombre = limpio(d.nombre);
+  const matricula = limpio(d.matricula) ? formatearMatricula(d.matricula) : '';
+  if (!nombre) throw new ErrorNegocio('Falta el nombre.');
+  if (!matricula) throw new ErrorNegocio('Falta la matrícula.');
+  const datosActualizados = {
+    fecha: d.fecha,
+    hora: d.hora,
+    nombre,
+    telefono: limpio(d.telefono),
+    matricula,
+    coche: limpio(d.coche) || '—',
+    motivo: limpio(d.motivo) || 'Sin especificar',
+  };
+  const r = await db.from('citas').update(datosActualizados).eq('id', id);
+  if (r.error) throw errorDeBd(r.error, 'actualizar cita');
+  return { ...c, ...datosActualizados };
+}
+
 export async function anularCita(db: Db, id: string): Promise<Cita> {
   const c = await leerCita(db, id);
   if (!c) throw new ErrorNegocio('Esa cita ya no existe.');
@@ -539,7 +567,7 @@ export async function anularCita(db: Db, id: string): Promise<Cita> {
 }
 
 /** Próximos huecos libres (no se ofrecen los de hoy que ya han pasado o están a punto). */
-export async function huecosLibres(db: Db, maximo = 12, diasVista = 12): Promise<{ fecha: string; hora: string }[]> {
+export async function huecosLibres(db: Db, maximo = 12, diasVista = 12, listaHuecos: string[] = HUECOS): Promise<{ fecha: string; hora: string }[]> {
   const desde = hoy();
   const ocupados = await huecosOcupados(db, desde, sumarDias(desde, diasVista));
   const libres: { fecha: string; hora: string }[] = [];
@@ -547,7 +575,7 @@ export async function huecosLibres(db: Db, maximo = 12, diasVista = 12): Promise
   let dia = desde;
   for (let i = 0; i < diasVista && libres.length < maximo; i++) {
     if (esLaborable(dia)) {
-      for (const hora of HUECOS) {
+      for (const hora of listaHuecos) {
         if (instante(dia, hora).getTime() < margen) continue;
         if (!ocupados.has(`${dia} ${hora}`)) libres.push({ fecha: dia, hora });
         if (libres.length >= maximo) break;

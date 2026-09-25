@@ -8,6 +8,10 @@ export type Database = {
   __InternalSupabase: { PostgrestVersion: '14.5' };
   public: {
     Tables: {
+      ajustes: Tabla<
+        { actualizado: string; clave: string; valor: Json },
+        { actualizado?: string; clave: string; valor: Json }
+      >;
       citas: Tabla<
         {
           cliente_id: string | null; coche: string; conversacion_id: string | null; creada: string; fecha: string; hora: string;

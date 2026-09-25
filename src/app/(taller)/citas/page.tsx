@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { dbSesion, exigirVista } from '@/lib/sesion';
 import { citasEntre, cochesPorIds, ordenesAbiertas } from '@/lib/datos';
 import { claveMatricula } from '@/lib/formato';
-import { HUECOS } from '@/lib/constantes';
+import { huecosActivos } from '@/lib/constantes';
+import { leerHorarioTaller } from '@/lib/ajustes';
 import { DIAS, diaSemana, esLaborable, fmtDiaCorto, fmtSemana, hoy, lunesDe, sumarDias } from '@/lib/fechas';
 import { SemanaCitas, type CitaVista, type DiaVista } from '@/components/citas/semana';
 
@@ -23,7 +24,13 @@ export default async function PaginaCitas({ searchParams }: { searchParams: Prom
   });
 
   const db = await dbSesion();
-  const [semanaCitas, abiertas] = await Promise.all([citasEntre(db, fechas[0], fechas[4]), ordenesAbiertas(db)]);
+  const [semanaCitas, abiertas, horario] = await Promise.all([
+    citasEntre(db, fechas[0], fechas[4]),
+    ordenesAbiertas(db),
+    leerHorarioTaller(db),
+  ]);
+
+  const huecosTotales = huecosActivos(horario);
   const cochesDentro = await cochesPorIds(db, abiertas.map((o) => o.cocheId));
   const citas: CitaVista[] = semanaCitas
     .map((c) => {
@@ -35,21 +42,25 @@ export default async function PaginaCitas({ searchParams }: { searchParams: Prom
       };
     });
 
+  const descripcionHorarios = horario.tardeActiva
+    ? `${huecosTotales.length} huecos diarios (${horario.huecosManana.length} mañana · ${horario.huecosTarde.length} tarde)`
+    : `${huecosTotales.length} huecos diarios cada mañana`;
+
   return (
     <main className="px-4 sm:px-7 pt-6 pb-10 flex flex-col gap-[18px]">
       <div className="flex justify-between items-end gap-4 flex-wrap">
         <div>
           <h1 className="m-0 text-[26px] font-bold">Citas</h1>
-          <div className="text-t2 text-sm mt-1">{fmtSemana(lunes)} · {HUECOS.length} huecos de entrada cada mañana</div>
+          <div className="text-t2 text-sm mt-1">{fmtSemana(lunes)} · {descripcionHorarios}</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Link href={`/citas?semana=${sumarDias(lunes, -7)}`} className="btn btn-borde h-9 px-3 text-sm" aria-label="Semana anterior">‹</Link>
           {lunes !== lunesActual && <Link href="/citas" className="btn btn-borde h-9 px-3 text-sm">Esta semana</Link>}
           <Link href={`/citas?semana=${sumarDias(lunes, 7)}`} className="btn btn-borde h-9 px-3 text-sm" aria-label="Semana siguiente">›</Link>
-          <span className="text-[15px] font-semibold ml-2">{citas.length} de {HUECOS.length * 5} huecos ocupados</span>
+          <span className="text-[15px] font-semibold ml-2">{citas.length} de {huecosTotales.length * 5} huecos ocupados</span>
         </div>
       </div>
-      <SemanaCitas key={lunes} dias={dias} huecos={HUECOS} citas={citas} />
+      <SemanaCitas key={lunes} dias={dias} horarioInicial={horario} citas={citas} />
     </main>
   );
 }

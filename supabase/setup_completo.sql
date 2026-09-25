@@ -123,6 +123,13 @@ create index if not exists citas_cliente_idx on public.citas (cliente_id);
 create index if not exists citas_orden_idx on public.citas (orden_id);
 create index if not exists citas_conversacion_idx on public.citas (conversacion_id);
 
+create table if not exists public.ajustes (
+  clave text primary key check (length(clave) between 1 and 60),
+  valor jsonb not null default '{}'::jsonb,
+  actualizado timestamptz not null default now()
+);
+
+
 -- 3. Esquema privado y funciones auxiliares
 create schema if not exists privado;
 revoke all on schema privado from public;
@@ -160,6 +167,7 @@ grant select, insert, update on public.ordenes to authenticated;
 grant select, insert, update on public.conversaciones to authenticated;
 grant select, insert on public.mensajes to authenticated;
 grant select, insert, update, delete on public.citas to authenticated;
+grant select, insert, update on public.ajustes to authenticated;
 grant usage on sequence public.orden_numero to authenticated;
 
 alter table public.personas enable row level security;
@@ -170,8 +178,13 @@ alter table public.ordenes enable row level security;
 alter table public.conversaciones enable row level security;
 alter table public.mensajes enable row level security;
 alter table public.citas enable row level security;
+alter table public.ajustes enable row level security;
 
 -- 5. Reglas de seguridad (RLS)
+drop policy if exists "ajustes: taller lee y cambia" on public.ajustes;
+create policy "ajustes: taller lee y cambia" on public.ajustes for all to authenticated
+  using ((select privado.es_taller())) with check ((select privado.es_taller()));
+
 drop policy if exists "personas: las ve el equipo" on public.personas;
 create policy "personas: las ve el equipo" on public.personas for select to authenticated
   using ((select privado.rol()) in ('dueno', 'recepcion', 'mecanico'));
