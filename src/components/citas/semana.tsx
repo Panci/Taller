@@ -41,17 +41,27 @@ const CAMPOS: [keyof typeof VACIO, string, string][] = [
 
 const horaCorta = (h: string) => h.replace(/^0/, '');
 
+function asegurarHorario(h?: Partial<HorarioTaller> | null): HorarioTaller {
+  return {
+    tardeActiva: h?.tardeActiva !== false,
+    huecosManana: Array.isArray(h?.huecosManana) && h.huecosManana.length > 0 ? h.huecosManana : HORARIO_DEFECTO.huecosManana,
+    huecosTarde: Array.isArray(h?.huecosTarde) && h.huecosTarde.length > 0 ? h.huecosTarde : HORARIO_DEFECTO.huecosTarde,
+  };
+}
+
 export function SemanaCitas({
   dias,
   horarioInicial,
+  huecos,
   citas,
 }: {
   dias: DiaVista[];
-  horarioInicial: HorarioTaller;
+  horarioInicial?: HorarioTaller;
+  huecos?: string[];
   citas: CitaVista[];
 }) {
   const router = useRouter();
-  const [horario, setHorario] = useState<HorarioTaller>(horarioInicial);
+  const [horario, setHorario] = useState<HorarioTaller>(() => asegurarHorario(horarioInicial));
   const [sel, setSel] = useState<{ fecha: string; hora: string } | null>(null);
   const [form, setForm] = useState(VACIO);
 
@@ -69,11 +79,20 @@ export function SemanaCitas({
 
   // Estado para el modal de configuración de horarios del taller
   const [modalHorarios, setModalHorarios] = useState(false);
-  const [horarioDraft, setHorarioDraft] = useState<HorarioTaller>(horarioInicial);
+  const [horarioDraft, setHorarioDraft] = useState<HorarioTaller>(() => asegurarHorario(horarioInicial));
   const [nuevaHoraManana, setNuevaHoraManana] = useState('');
   const [nuevaHoraTarde, setNuevaHoraTarde] = useState('');
 
   const { pendiente, ejecutar } = useAccion();
+
+  // Variables seguras para el renderizado
+  const manana = horario?.huecosManana ?? HORARIO_DEFECTO.huecosManana;
+  const tarde = horario?.huecosTarde ?? HORARIO_DEFECTO.huecosTarde;
+  const tardeActiva = horario?.tardeActiva !== false;
+
+  const draftManana = horarioDraft?.huecosManana ?? HORARIO_DEFECTO.huecosManana;
+  const draftTarde = horarioDraft?.huecosTarde ?? HORARIO_DEFECTO.huecosTarde;
+  const draftTardeActiva = horarioDraft?.tardeActiva !== false;
 
   const citaEn = (fecha: string, hora: string) => citas.find((c) => c.fecha === fecha && c.hora === hora);
   const elegida = sel ? citaEn(sel.fecha, sel.hora) : undefined;
@@ -143,7 +162,6 @@ export function SemanaCitas({
   const agregarHora = (turno: 'manana' | 'tarde') => {
     const raw = turno === 'manana' ? nuevaHoraManana.trim() : nuevaHoraTarde.trim();
     if (!raw) return;
-    // Normalizar a HH:MM
     const partes = raw.split(':');
     if (partes.length !== 2) return;
     const h = partes[0].padStart(2, '0');
@@ -151,18 +169,18 @@ export function SemanaCitas({
     const horaFmt = `${h}:${m}`;
 
     if (turno === 'manana') {
-      if (!horarioDraft.huecosManana.includes(horaFmt)) {
+      if (!draftManana.includes(horaFmt)) {
         setHorarioDraft((prev) => ({
-          ...prev,
-          huecosManana: [...prev.huecosManana, horaFmt].sort(),
+          ...asegurarHorario(prev),
+          huecosManana: [...(prev?.huecosManana ?? HORARIO_DEFECTO.huecosManana), horaFmt].sort(),
         }));
       }
       setNuevaHoraManana('');
     } else {
-      if (!horarioDraft.huecosTarde.includes(horaFmt)) {
+      if (!draftTarde.includes(horaFmt)) {
         setHorarioDraft((prev) => ({
-          ...prev,
-          huecosTarde: [...prev.huecosTarde, horaFmt].sort(),
+          ...asegurarHorario(prev),
+          huecosTarde: [...(prev?.huecosTarde ?? HORARIO_DEFECTO.huecosTarde), horaFmt].sort(),
         }));
       }
       setNuevaHoraTarde('');
@@ -172,13 +190,13 @@ export function SemanaCitas({
   const quitarHora = (turno: 'manana' | 'tarde', hora: string) => {
     if (turno === 'manana') {
       setHorarioDraft((prev) => ({
-        ...prev,
-        huecosManana: prev.huecosManana.filter((x) => x !== hora),
+        ...asegurarHorario(prev),
+        huecosManana: (prev?.huecosManana ?? HORARIO_DEFECTO.huecosManana).filter((x) => x !== hora),
       }));
     } else {
       setHorarioDraft((prev) => ({
-        ...prev,
-        huecosTarde: prev.huecosTarde.filter((x) => x !== hora),
+        ...asegurarHorario(prev),
+        huecosTarde: (prev?.huecosTarde ?? HORARIO_DEFECTO.huecosTarde).filter((x) => x !== hora),
       }));
     }
   };
@@ -187,14 +205,14 @@ export function SemanaCitas({
     <div className="flex flex-col gap-4">
       {/* Barra de opciones de calendario */}
       <div className="flex justify-between items-center bg-white border border-borde rounded-xl px-4 py-3 flex-wrap gap-3">
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm flex-wrap">
           <span className="font-semibold text-t3">Horario visible:</span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-xs font-medium">
-            ☀️ Mañana ({horario.huecosManana.join(', ') || 'sin huecos'})
+            ☀️ Mañana ({manana.join(', ') || 'sin huecos'})
           </span>
-          {horario.tardeActiva && (
+          {tardeActiva && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-900 border border-blue-200 text-xs font-medium">
-              🌙 Tarde ({horario.huecosTarde.join(', ') || 'sin huecos'})
+              🌙 Tarde ({tarde.join(', ') || 'sin huecos'})
             </span>
           )}
         </div>
@@ -202,7 +220,7 @@ export function SemanaCitas({
         <button
           type="button"
           onClick={() => {
-            setHorarioDraft(horario);
+            setHorarioDraft(asegurarHorario(horario));
             setModalHorarios(true);
           }}
           className="btn btn-borde h-8.5 px-3 text-xs font-semibold text-t2 hover:text-tinta"
@@ -216,10 +234,9 @@ export function SemanaCitas({
         <div className="flex-[3_1_720px] min-w-0 overflow-x-auto">
           <div className="grid grid-cols-[repeat(5,minmax(150px,1fr))] gap-2.5 min-w-[780px]">
             {dias.map((d) => {
-              // Comprobar si hay citas extraordinarias que no caen en los tramos estándar
               const huecosEstandar = [
-                ...horario.huecosManana,
-                ...(horario.tardeActiva ? horario.huecosTarde : []),
+                ...manana,
+                ...(tardeActiva ? tarde : []),
               ];
               const citasExtra = citas.filter((c) => c.fecha === d.fecha && !huecosEstandar.includes(c.hora));
 
@@ -294,22 +311,22 @@ export function SemanaCitas({
                   </div>
 
                   {/* Sección Turno Mañana */}
-                  {horario.huecosManana.length > 0 && (
+                  {manana.length > 0 && (
                     <div className="flex flex-col gap-1.5">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-t4 px-1 flex items-center gap-1">
                         <span>☀️</span> Mañana
                       </div>
-                      {horario.huecosManana.map((h) => renderBoton(h, false))}
+                      {manana.map((h) => renderBoton(h, false))}
                     </div>
                   )}
 
                   {/* Sección Turno Tarde */}
-                  {horario.tardeActiva && horario.huecosTarde.length > 0 && (
+                  {tardeActiva && tarde.length > 0 && (
                     <div className="flex flex-col gap-1.5 pt-1.5 border-t border-linea">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-t4 px-1 flex items-center gap-1">
                         <span>🌙</span> Tarde
                       </div>
-                      {horario.huecosTarde.map((h) => renderBoton(h, true))}
+                      {tarde.map((h) => renderBoton(h, true))}
                     </div>
                   )}
 
@@ -432,15 +449,15 @@ export function SemanaCitas({
                     className="campo h-[40px] text-sm px-2.5 bg-white flex-1"
                   >
                     <optgroup label="Turno de mañana">
-                      {horario.huecosManana.map((h) => (
+                      {manana.map((h) => (
                         <option key={h} value={h}>
                           {h}
                         </option>
                       ))}
                     </optgroup>
-                    {horario.tardeActiva && (
+                    {tardeActiva && (
                       <optgroup label="Turno de tarde">
-                        {horario.huecosTarde.map((h) => (
+                        {tarde.map((h) => (
                           <option key={h} value={h}>
                             {h}
                           </option>
@@ -590,13 +607,13 @@ export function SemanaCitas({
                   <span>☀️</span> Turno de Mañana
                 </span>
                 <span className="text-xs text-amber-800 font-medium">
-                  {horarioDraft.huecosManana.length} tramos
+                  {draftManana.length} tramos
                 </span>
               </div>
 
               {/* Chips de horas */}
               <div className="flex flex-wrap gap-1.5">
-                {horarioDraft.huecosManana.map((h) => (
+                {draftManana.map((h) => (
                   <span
                     key={h}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-xs font-mono font-bold text-amber-900 shadow-2xs"
@@ -638,9 +655,9 @@ export function SemanaCitas({
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={horarioDraft.tardeActiva}
+                    checked={draftTardeActiva}
                     onChange={(e) =>
-                      setHorarioDraft((prev) => ({ ...prev, tardeActiva: e.target.checked }))
+                      setHorarioDraft((prev) => ({ ...asegurarHorario(prev), tardeActiva: e.target.checked }))
                     }
                     className="h-4 w-4 rounded accent-rojo cursor-pointer"
                   />
@@ -648,18 +665,18 @@ export function SemanaCitas({
                     <span>🌙</span> Habilitar horario de Tarde
                   </span>
                 </label>
-                {horarioDraft.tardeActiva && (
+                {draftTardeActiva && (
                   <span className="text-xs text-blue-800 font-medium">
-                    {horarioDraft.huecosTarde.length} tramos
+                    {draftTarde.length} tramos
                   </span>
                 )}
               </div>
 
-              {horarioDraft.tardeActiva && (
+              {draftTardeActiva && (
                 <>
                   {/* Chips de horas */}
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {horarioDraft.huecosTarde.map((h) => (
+                    {draftTarde.map((h) => (
                       <span
                         key={h}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-blue-300 text-xs font-mono font-bold text-blue-900 shadow-2xs"
