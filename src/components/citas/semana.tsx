@@ -52,12 +52,10 @@ function asegurarHorario(h?: Partial<HorarioTaller> | null): HorarioTaller {
 export function SemanaCitas({
   dias,
   horarioInicial,
-  huecos,
   citas,
 }: {
   dias: DiaVista[];
   horarioInicial?: HorarioTaller;
-  huecos?: string[];
   citas: CitaVista[];
 }) {
   const router = useRouter();

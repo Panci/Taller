@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import type { Db } from './supabase/servidor';
 import type { Json } from './supabase/tipos-bd';
-import { HORARIO_DEFECTO, type HorarioTaller, huecosActivos } from './constantes';
+import { HORARIO_DEFECTO, type HorarioTaller } from './constantes';
 
 const CLAVE_HORARIO = 'horarios_citas';
 const COOKIE_HORARIO = 'taller_horario_cfg';
