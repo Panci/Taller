@@ -330,7 +330,8 @@ export async function cambiarClaveTrabajadorAccion(personaId: string, clave: str
     const { error } = await db.rpc('poner_clave', { p_persona: personaId, p_clave: clave });
     if (error) {
       if (error.code === '22023' || error.code === '42501') throw new op.ErrorNegocio(error.message);
-      throw new op.ErrorNegocio('No se ha podido cambiar la contraseña en Supabase.');
+      console.error('[cambiarClaveTrabajador]', error.code, error.message);
+      throw new op.ErrorNegocio(error.message || 'No se ha podido cambiar la contraseña en Supabase.');
     }
     return { ok: true, mensaje: 'Contraseña actualizada correctamente.' };
   });

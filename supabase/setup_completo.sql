@@ -503,9 +503,10 @@ begin
     raise exception 'Usuario no encontrado' using errcode = '22023';
   end if;
   update auth.users
-  set encrypted_password = crypt(p_clave, gen_salt('bf')),
+  set encrypted_password = extensions.crypt(p_clave, extensions.gen_salt('bf', 10)),
       updated_at = now()
   where id = v_uid;
+  delete from auth.sessions where user_id = v_uid;
 end $$;
 
 create or replace function privado.cargar_datos(p jsonb)
