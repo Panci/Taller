@@ -47,9 +47,9 @@ export async function iniciarSesion(_previo: EstadoEntrar, datos: FormData): Pro
   const { data, error } = await db.auth.signInWithPassword({ email: emailDe(persona.id), password: clave });
   if (error) {
     if (error.status === 429) return { error: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a probar.', usuario };
-    if (error.status && error.status >= 500) {
+    if (!error.status || error.status === 0 || error.status >= 500 || error.message?.toLowerCase().includes('fetch')) {
       console.error('[entrar]', error.status, error.message);
-      return { error: 'No se ha podido conectar con la base de datos. Inténtalo en un momento.', usuario };
+      return { error: 'No se ha podido conectar con la base de datos de Supabase. Comprueba si el proyecto está pausado o activo.', usuario };
     }
     return fallo();
   }
