@@ -41,7 +41,6 @@ export function PanelConfiguracion({
   const [probandoIA, setProbandoIA] = useState(false);
   const [resultadoPrueba, setResultadoPrueba] = useState<{ ok: boolean; mensaje: string } | null>(null);
 
-  // ——— Estado Trabajadores ———
   const [trabajadores, setTrabajadores] = useState<Persona[]>(trabajadoresInicial);
   const [trabajadorEditando, setTrabajadorEditando] = useState<Persona | null>(null);
   const [cambiandoClaveId, setCambiandoClaveId] = useState<string | null>(null);

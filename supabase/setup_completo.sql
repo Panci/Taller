@@ -159,7 +159,7 @@ $$;
 revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
-grant select on public.personas to authenticated;
+grant select, update on public.personas to authenticated;
 grant select, insert, update on public.clientes to authenticated;
 grant select, insert, update on public.coches to authenticated;
 grant select, insert, update, delete on public.tarifa to authenticated;
@@ -188,6 +188,11 @@ create policy "ajustes: taller lee y cambia" on public.ajustes for all to authen
 drop policy if exists "personas: las ve el equipo" on public.personas;
 create policy "personas: las ve el equipo" on public.personas for select to authenticated
   using ((select privado.rol()) in ('dueno', 'recepcion', 'mecanico'));
+
+drop policy if exists "personas: dueño puede modificar" on public.personas;
+create policy "personas: dueño puede modificar" on public.personas for update to authenticated
+  using ((select privado.rol()) = 'dueno')
+  with check ((select privado.rol()) = 'dueno');
 
 drop policy if exists "clientes: taller, y el mecanico los de sus coches" on public.clientes;
 create policy "clientes: taller, y el mecanico los de sus coches" on public.clientes for select to authenticated

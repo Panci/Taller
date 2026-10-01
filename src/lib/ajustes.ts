@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import type { Db } from './supabase/servidor';
+import { clienteSesion, clienteAsistente, supabaseConfigurado, type Db } from './supabase/servidor';
 import type { Json } from './supabase/tipos-bd';
 import {
   HORARIO_DEFECTO,
@@ -23,12 +23,29 @@ const COOKIE_TALLER = 'taller_datos_cfg';
 const COOKIE_IA = 'taller_ia_cfg';
 const COOKIE_TRABAJADORES = 'taller_trabajadores_cfg';
 
+async function resolverDb(db?: Db | null): Promise<Db | null> {
+  if (db) return db;
+  if (!supabaseConfigurado()) return null;
+  try {
+    return await clienteSesion();
+  } catch {
+    //
+  }
+  try {
+    return await clienteAsistente();
+  } catch {
+    //
+  }
+  return null;
+}
+
 // ——— HORARIOS ———
 
 export async function leerHorarioTaller(db?: Db | null): Promise<HorarioTaller> {
-  if (db) {
+  const cliente = await resolverDb(db);
+  if (cliente) {
     try {
-      const { data, error } = await db
+      const { data, error } = await cliente
         .from('ajustes')
         .select('valor')
         .eq('clave', CLAVE_HORARIO)
@@ -123,9 +140,10 @@ export const DATOS_TALLER_DEFECTO: DatosTaller = {
 };
 
 export async function leerDatosTaller(db?: Db | null): Promise<DatosTaller> {
-  if (db) {
+  const cliente = await resolverDb(db);
+  if (cliente) {
     try {
-      const { data, error } = await db
+      const { data, error } = await cliente
         .from('ajustes')
         .select('valor')
         .eq('clave', CLAVE_TALLER)
@@ -226,9 +244,10 @@ export async function leerConfiguracionIA(db?: Db | null): Promise<Configuracion
   let modeloTexto = process.env.OPENROUTER_MODEL?.trim() || CONFIG_IA_DEFECTO.modeloTexto;
   let modeloAudio = process.env.OPENROUTER_AUDIO_MODEL?.trim() || CONFIG_IA_DEFECTO.modeloAudio;
 
-  if (db) {
+  const cliente = await resolverDb(db);
+  if (cliente) {
     try {
-      const { data, error } = await db
+      const { data, error } = await cliente
         .from('ajustes')
         .select('valor')
         .eq('clave', CLAVE_IA)
@@ -305,35 +324,51 @@ export async function guardarConfiguracionIA(db: Db, config: ConfiguracionIA): P
 // ——— TRABAJADORES DEL TALLER ———
 
 export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]> {
-  // 1. Intentar leer de la tabla 'personas'
-  if (db) {
+  const cliente = await resolverDb(db);
+
+  // 1. Prioridad: leer de la tabla 'ajustes' (donde se guardan las personalizaciones)
+  if (cliente) {
     try {
-      const { data, error } = await db.from('personas').select('*');
+      const { data, error } = await cliente
+        .from('ajustes')
+        .select('valor')
+        .eq('clave', CLAVE_TRABAJADORES)
+        .maybeSingle();
+
+      if (!error && Array.isArray(data?.valor) && data.valor.length > 0) {
+        const guardados = data.valor as unknown as Persona[];
+        const res = PERSONAS.map((base) => {
+          const modificado = guardados.find((g) => g.id === base.id);
+          return modificado ? { ...base, ...modificado } : base;
+        });
+        for (const g of guardados) {
+          if (!res.some((r) => r.id === g.id)) res.push(g);
+        }
+        actualizarMemoriaTrabajadores(res);
+        return res;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 2. Si no hay ajustes guardados, leer de la tabla 'personas'
+  if (cliente) {
+    try {
+      const { data, error } = await cliente.from('personas').select('*');
       if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((f: { id: string; nombre: string; nombre_completo: string; rol: string; rol_etiqueta: string }) => ({
+        const res = data.map((f: { id: string; nombre: string; nombre_completo: string; rol: string; rol_etiqueta: string }) => ({
           id: f.id as Persona['id'],
           nombre: f.nombre,
           nombreCompleto: f.nombre_completo,
           rol: f.rol as Persona['rol'],
           rolEtiqueta: f.rol_etiqueta,
         }));
-      }
-    } catch {
-      //
-    }
-  }
-
-  // 2. Intentar leer de la tabla ajustes (clave 'trabajadores_taller')
-  if (db) {
-    try {
-      const { data, error } = await db.from('ajustes').select('valor').eq('clave', CLAVE_TRABAJADORES).maybeSingle();
-      if (!error && Array.isArray(data?.valor)) {
-        const res = data.valor as unknown as Persona[];
         actualizarMemoriaTrabajadores(res);
         return res;
       }
     } catch {
-      //
+      // Fallback
     }
   }
 
@@ -344,8 +379,12 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        actualizarMemoriaTrabajadores(parsed);
-        return parsed;
+        const res = PERSONAS.map((base) => {
+          const modificado = parsed.find((g: Persona) => g.id === base.id);
+          return modificado ? { ...base, ...modificado } : base;
+        });
+        actualizarMemoriaTrabajadores(res);
+        return res;
       }
     }
   } catch {
@@ -359,21 +398,7 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
 export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
   let enBd = false;
 
-  // Actualizar tabla personas si está disponible
-  try {
-    const { error } = await db.from('personas').upsert({
-      id: p.id,
-      nombre: p.nombre,
-      nombre_completo: p.nombreCompleto,
-      rol: p.rol,
-      rol_etiqueta: p.rolEtiqueta,
-    });
-    if (!error) enBd = true;
-  } catch {
-    //
-  }
-
-  // Actualizar lista en ajustes y memoria
+  // 1. Guardar lista en ajustes y actualizar memoria
   try {
     const actuales = await leerTrabajadoresTaller(db);
     const idx = actuales.findIndex((x) => x.id === p.id);
@@ -383,12 +408,16 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
 
     actualizarMemoriaTrabajadores(nuevaLista);
 
-    const { error } = await db.from('ajustes').upsert({
+    const { error: errorAjustes } = await db.from('ajustes').upsert({
       clave: CLAVE_TRABAJADORES,
       valor: nuevaLista as unknown as Json,
       actualizado: new Date().toISOString(),
     });
-    if (!error) enBd = true;
+    if (!errorAjustes) {
+      enBd = true;
+    } else {
+      console.error('[guardarTrabajadorTaller] Error en tabla ajustes:', errorAjustes);
+    }
 
     try {
       const c = await cookies();
@@ -402,6 +431,20 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
     } catch {
       //
     }
+  } catch (e) {
+    console.error('[guardarTrabajadorTaller] Error procesando lista:', e);
+  }
+
+  // 2. Intentar actualizar también la tabla personas en Supabase
+  try {
+    const { error: errorPersonas } = await db.from('personas').upsert({
+      id: p.id,
+      nombre: p.nombre,
+      nombre_completo: p.nombreCompleto,
+      rol: p.rol,
+      rol_etiqueta: p.rolEtiqueta,
+    });
+    if (!errorPersonas) enBd = true;
   } catch {
     //
   }

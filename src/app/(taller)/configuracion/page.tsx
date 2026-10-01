@@ -26,6 +26,7 @@ export default async function PaginaConfiguracion() {
       </div>
 
       <PanelConfiguracion
+        key={`${taller.nombre}-${trabajadores.map((t) => `${t.id}:${t.nombre}:${t.nombreCompleto}`).join(',')}`}
         datosTallerInicial={taller}
         configIAInicial={configIA}
         trabajadoresInicial={trabajadores}
