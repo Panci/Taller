@@ -9,22 +9,26 @@ import {
   probarClaveIAAccion,
   guardarTrabajadorAccion,
   cambiarClaveTrabajadorAccion,
+  guardarConfiguracionWhatsAppAccion,
+  probarEnvioWhatsAppAccion,
 } from '@/app/acciones';
-import type { DatosTaller, ConfiguracionIA } from '@/lib/ajustes';
+import type { DatosTaller, ConfiguracionIA, ConfiguracionWhatsApp } from '@/lib/ajustes';
 import type { Persona } from '@/lib/tipos';
 
-type Pestana = 'taller' | 'trabajadores' | 'ia';
+type Pestana = 'taller' | 'trabajadores' | 'ia' | 'whatsapp';
 
 export function PanelConfiguracion({
   datosTallerInicial,
   configIAInicial,
   trabajadoresInicial,
   iaActivaInicial,
+  configWhatsAppInicial,
 }: {
   datosTallerInicial: DatosTaller;
   configIAInicial: ConfiguracionIA;
   trabajadoresInicial: Persona[];
   iaActivaInicial: boolean;
+  configWhatsAppInicial: ConfiguracionWhatsApp;
 }) {
   const router = useRouter();
   const avisar = useAvisos();
@@ -40,6 +44,15 @@ export function PanelConfiguracion({
   const [verClave, setVerClave] = useState(false);
   const [probandoIA, setProbandoIA] = useState(false);
   const [resultadoPrueba, setResultadoPrueba] = useState<{ ok: boolean; mensaje: string } | null>(null);
+
+  // ——— Estado WhatsApp ———
+  const [whatsAppConfig, setWhatsAppConfig] = useState<ConfiguracionWhatsApp>(configWhatsAppInicial);
+  const [verTokenWhatsApp, setVerTokenWhatsApp] = useState(false);
+  const [telefonoPruebaWhatsApp, setTelefonoPruebaWhatsApp] = useState('');
+  const [textoPruebaWhatsApp, setTextoPruebaWhatsApp] = useState('¡Hola! Mensaje de prueba desde el taller.');
+  const [probandoWhatsApp, setProbandoWhatsApp] = useState(false);
+  const [resultadoPruebaWhatsApp, setResultadoPruebaWhatsApp] = useState<{ ok: boolean; mensaje: string } | null>(null);
+  const [copiadoWebhook, setCopiadoWebhook] = useState(false);
 
   const [trabajadores, setTrabajadores] = useState<Persona[]>(trabajadoresInicial);
   const [trabajadorEditando, setTrabajadorEditando] = useState<Persona | null>(null);
@@ -94,6 +107,67 @@ export function PanelConfiguracion({
       setResultadoPrueba({ ok: false, mensaje: 'Error al conectar con el servidor para probar la clave.' });
     } finally {
       setProbandoIA(false);
+    }
+  };
+
+  // ——— Guardar WhatsApp ———
+  const handleGuardarWhatsApp = (e: React.FormEvent) => {
+    e.preventDefault();
+    ejecutar(
+      () => guardarConfiguracionWhatsAppAccion(whatsAppConfig),
+      (r) => {
+        if (r.ok) {
+          avisar(r.mensaje || 'Configuración de WhatsApp guardada.');
+          router.refresh();
+        }
+      }
+    );
+  };
+
+  // ——— Probar WhatsApp ———
+  const handleProbarWhatsApp = async () => {
+    if (!whatsAppConfig.token?.trim() || !whatsAppConfig.phoneId?.trim()) {
+      setResultadoPruebaWhatsApp({
+        ok: false,
+        mensaje: 'Introduce primero el Token de Meta y el Phone Number ID para poder probar el envío.',
+      });
+      return;
+    }
+    if (!telefonoPruebaWhatsApp.trim()) {
+      setResultadoPruebaWhatsApp({
+        ok: false,
+        mensaje: 'Escribe el número de teléfono de destino (con código de país, ej. 34600112233).',
+      });
+      return;
+    }
+    setProbandoWhatsApp(true);
+    setResultadoPruebaWhatsApp(null);
+    try {
+      const r = await probarEnvioWhatsAppAccion(
+        telefonoPruebaWhatsApp.trim(),
+        textoPruebaWhatsApp.trim() || 'Prueba de conexión de WhatsApp desde el taller'
+      );
+      if (r.ok) {
+        setResultadoPruebaWhatsApp({ ok: true, mensaje: r.mensaje || '¡Mensaje enviado con éxito por WhatsApp!' });
+      } else {
+        setResultadoPruebaWhatsApp({ ok: false, mensaje: r.error || 'Error al enviar mensaje por Meta API.' });
+      }
+    } catch {
+      setResultadoPruebaWhatsApp({ ok: false, mensaje: 'Error al conectar con el servidor para probar WhatsApp.' });
+    } finally {
+      setProbandoWhatsApp(false);
+    }
+  };
+
+  const copiarWebhook = () => {
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/api/whatsapp`
+        : 'https://taller-blond.vercel.app/api/whatsapp';
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiadoWebhook(true);
+      setTimeout(() => setCopiadoWebhook(false), 2500);
     }
   };
 
@@ -173,6 +247,20 @@ export function PanelConfiguracion({
             <span className="w-2 h-2 rounded-full bg-verde shrink-0" title="IA Activa" />
           ) : (
             <span className="w-2 h-2 rounded-full bg-rojo shrink-0" title="IA pendiente" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setPestana('whatsapp')}
+          className={`px-4 py-3 text-[15px] font-semibold border-b-[3px] flex items-center gap-2 transition-colors whitespace-nowrap ${
+            pestana === 'whatsapp' ? 'border-rojo text-tinta' : 'border-transparent text-t2 hover:text-tinta'
+          }`}
+        >
+          <span>💬</span> WhatsApp
+          {whatsAppConfig.activo ? (
+            <span className="w-2 h-2 rounded-full bg-verde shrink-0" title="WhatsApp Activado" />
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="WhatsApp Pausado / Desactivado" />
           )}
         </button>
       </div>
@@ -650,6 +738,297 @@ export function PanelConfiguracion({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ——— PESTAÑA 4: WHATSAPP (META CLOUD API) ——— */}
+      {pestana === 'whatsapp' && (
+        <div className="flex flex-col gap-6">
+          {/* Tarjeta de Estado y Activación */}
+          <div className="tarjeta p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-white to-[#F0FDF4] border-l-4 border-l-verde">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold m-0">Canal de WhatsApp Business</h2>
+                <span
+                  className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    whatsAppConfig.activo
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {whatsAppConfig.activo ? 'Activado' : 'Pausado / En preparación'}
+                </span>
+              </div>
+              <p className="text-sm text-t2 mt-1 mb-0">
+                {whatsAppConfig.activo
+                  ? 'El canal de WhatsApp está activo. Los clientes pueden comunicarse con tu taller y el asistente responderá automáticamente.'
+                  : 'El canal está pausado para que puedas introducir y comprobar tus claves con total tranquilidad antes de que los clientes lo usen.'}
+              </p>
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer select-none bg-white px-4 py-2.5 rounded-xl border border-borde shadow-sm shrink-0">
+              <input
+                type="checkbox"
+                checked={whatsAppConfig.activo}
+                onChange={(e) => setWhatsAppConfig({ ...whatsAppConfig, activo: e.target.checked })}
+                className="w-5 h-5 accent-verde cursor-pointer rounded"
+              />
+              <span className="font-semibold text-sm">
+                {whatsAppConfig.activo ? 'WhatsApp Activo' : 'Pausar WhatsApp'}
+              </span>
+            </label>
+          </div>
+
+          {/* Formulario Principal de Configuración */}
+          <form onSubmit={handleGuardarWhatsApp} className="tarjeta p-6 sm:p-7 flex flex-col gap-6">
+            <div>
+              <h2 className="text-xl font-bold m-0">Conexión con Meta Cloud API</h2>
+              <p className="text-sm text-t2 mt-1 mb-0">
+                Conecta tu cuenta de Meta for Developers para que el taller reciba y envíe mensajes de WhatsApp de forma oficial y gratuita.
+              </p>
+            </div>
+
+            {/* Credenciales de Meta */}
+            <div className="flex flex-col gap-4">
+              <h3 className="text-base font-bold text-tinta m-0">1. Credenciales de la API</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="etiqueta md:col-span-2">
+                  Token de Acceso Permanente (System User Token)
+                  <div className="relative mt-1">
+                    <input
+                      type={verTokenWhatsApp ? 'text' : 'password'}
+                      className="campo h-11 text-base font-mono pr-24 text-xs sm:text-sm"
+                      value={whatsAppConfig.token}
+                      onChange={(e) => setWhatsAppConfig({ ...whatsAppConfig, token: e.target.value })}
+                      placeholder="EAA..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerTokenWhatsApp(!verTokenWhatsApp)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-t2 hover:text-tinta px-2 py-1 rounded bg-fondo"
+                    >
+                      {verTokenWhatsApp ? 'Ocultar' : 'Mostrar'}
+                    </button>
+                  </div>
+                  <span className="text-xs text-t2 mt-1 block">
+                    Token generado en Meta Business Manager con permiso <code>whatsapp_business_messaging</code>.
+                  </span>
+                </label>
+
+                <label className="etiqueta">
+                  Identificador de Número de Teléfono (Phone Number ID)
+                  <input
+                    type="text"
+                    className="campo h-11 text-base font-mono mt-1 text-xs sm:text-sm"
+                    value={whatsAppConfig.phoneId}
+                    onChange={(e) => setWhatsAppConfig({ ...whatsAppConfig, phoneId: e.target.value })}
+                    placeholder="Ej. 104859201948271"
+                  />
+                  <span className="text-xs text-t2 mt-1 block">
+                    Encuéntralo en Meta for Developers &gt; WhatsApp &gt; Configuración de la API.
+                  </span>
+                </label>
+
+                <label className="etiqueta">
+                  Teléfono público para enlace directo (wa.me)
+                  <input
+                    type="text"
+                    className="campo h-11 text-base mt-1"
+                    value={whatsAppConfig.telefonoVisible}
+                    onChange={(e) => setWhatsAppConfig({ ...whatsAppConfig, telefonoVisible: e.target.value })}
+                    placeholder="Ej. 34600123456 (con prefijo sin + ni espacios)"
+                  />
+                  <span className="text-xs text-t2 mt-1 block">
+                    Si lo indicas, se mostrará un botón directo en el chat web para que los clientes abran WhatsApp.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Configuración del Webhook */}
+            <div className="flex flex-col gap-4 pt-4 border-t border-borde">
+              <h3 className="text-base font-bold text-tinta m-0">2. Configuración del Webhook en Meta</h3>
+              <p className="text-xs text-t2 m-0">
+                Pega estos dos datos en la sección <b>WhatsApp &gt; Configuración del Webhook</b> dentro de tu panel de Meta for Developers.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="etiqueta">
+                  URL del Webhook (Callback URL)
+                  <div className="relative mt-1 flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      className="campo h-11 text-xs sm:text-sm font-mono bg-fondo/60 cursor-text select-all"
+                      value={typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp` : 'https://taller-blond.vercel.app/api/whatsapp'}
+                    />
+                    <button
+                      type="button"
+                      onClick={copiarWebhook}
+                      className="btn btn-blanco h-11 px-4 text-xs font-bold shrink-0"
+                    >
+                      {copiadoWebhook ? '✓ ¡Copiada!' : 'Copiar URL'}
+                    </button>
+                  </div>
+                  <span className="text-xs text-t2 mt-1 block">
+                    Dirección donde Meta notificará los mensajes entrantes de los clientes.
+                  </span>
+                </label>
+
+                <label className="etiqueta">
+                  Token de Verificación (Verify Token)
+                  <div className="relative mt-1 flex gap-2">
+                    <input
+                      type="text"
+                      className="campo h-11 text-xs sm:text-sm font-mono"
+                      value={whatsAppConfig.verifyToken}
+                      onChange={(e) => setWhatsAppConfig({ ...whatsAppConfig, verifyToken: e.target.value })}
+                      placeholder="taller_secreto_whatsapp"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWhatsAppConfig({
+                          ...whatsAppConfig,
+                          verifyToken: `wa_${Math.random().toString(36).substring(2, 12)}_${Date.now().toString(36)}`,
+                        })
+                      }
+                      className="btn btn-blanco h-11 px-3 text-xs font-semibold shrink-0"
+                      title="Generar token aleatorio"
+                    >
+                      Generar
+                    </button>
+                  </div>
+                  <span className="text-xs text-t2 mt-1 block">
+                    Pega este mismo texto en el campo <i>Token de verificación</i> de Meta.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button type="submit" disabled={pendiente} className="btn btn-rojo h-11 px-6 text-base font-semibold">
+                {pendiente ? 'Guardando…' : 'Guardar configuración de WhatsApp'}
+              </button>
+            </div>
+          </form>
+
+          {/* Tarjeta de Pruebas en Vivo */}
+          <div className="tarjeta p-6 sm:p-7 flex flex-col gap-4 border-l-4 border-l-[#25D366]">
+            <div>
+              <h2 className="text-xl font-bold m-0 flex items-center gap-2">
+                <span>🧪</span> Probar Envío de WhatsApp en Directo
+              </h2>
+              <p className="text-sm text-t2 mt-1 mb-0">
+                Envía un mensaje de prueba a tu propio número de teléfono para verificar que el Token y el Phone Number ID funcionan correctamente.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="etiqueta">
+                Teléfono de destino de la prueba
+                <input
+                  type="text"
+                  className="campo h-11 text-base mt-1"
+                  value={telefonoPruebaWhatsApp}
+                  onChange={(e) => setTelefonoPruebaWhatsApp(e.target.value)}
+                  placeholder="Ej. 34600123456 (incluye prefijo internacional)"
+                />
+              </label>
+
+              <label className="etiqueta">
+                Texto del mensaje de prueba
+                <input
+                  type="text"
+                  className="campo h-11 text-base mt-1"
+                  value={textoPruebaWhatsApp}
+                  onChange={(e) => setTextoPruebaWhatsApp(e.target.value)}
+                  placeholder="Mensaje de prueba..."
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleProbarWhatsApp}
+                disabled={probandoWhatsApp || !whatsAppConfig.token?.trim() || !whatsAppConfig.phoneId?.trim()}
+                className="btn btn-verde h-11 px-5 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+              >
+                {probandoWhatsApp ? 'Enviando prueba…' : '📲 Enviar mensaje de prueba ahora'}
+              </button>
+
+              <span className="text-xs text-t2">
+                Recuerda que en el entorno de desarrollo de Meta, el destinatario debe estar añadido en números de prueba.
+              </span>
+            </div>
+
+            {resultadoPruebaWhatsApp && (
+              <div
+                className={`p-3.5 rounded-lg border text-sm font-medium ${
+                  resultadoPruebaWhatsApp.ok
+                    ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#15803D]'
+                    : 'bg-rojo-50 border-rojo-200 text-rojo'
+                }`}
+              >
+                {resultadoPruebaWhatsApp.mensaje}
+              </div>
+            )}
+          </div>
+
+          {/* Guía Paso a Paso para el Cliente */}
+          <div className="tarjeta p-6 sm:p-7 flex flex-col gap-4 bg-fondo/40">
+            <div>
+              <h2 className="text-lg font-bold m-0 flex items-center gap-2">
+                <span>📖</span> Guía Rápida: Cómo conectar tu WhatsApp paso a paso
+              </h2>
+              <p className="text-sm text-t2 mt-1 mb-0">
+                Sigue estos 4 sencillos pasos para activar el servicio cuando tú o tu cliente lo decidáis:
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-white border border-borde flex flex-col gap-2">
+                <div className="font-bold text-sm text-rojo flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-rojo/10 text-rojo flex items-center justify-center text-xs">1</span>
+                  Crear App en Meta
+                </div>
+                <p className="text-xs text-t2 m-0 leading-relaxed">
+                  Entra en <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-rojo underline font-medium">developers.facebook.com</a>, pulsa en <b>Mis apps &gt; Crear app</b>, selecciona el tipo <b>Negocio</b> y añade el producto <b>WhatsApp</b>.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white border border-borde flex flex-col gap-2">
+                <div className="font-bold text-sm text-rojo flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-rojo/10 text-rojo flex items-center justify-center text-xs">2</span>
+                  Copiar Token y Phone ID
+                </div>
+                <p className="text-xs text-t2 m-0 leading-relaxed">
+                  En el menú lateral pulsa <b>WhatsApp &gt; Primeros pasos</b>. Copia el <b>Identificador de número de teléfono</b> y el <b>Token de acceso</b> y pégalos en los campos de arriba.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white border border-borde flex flex-col gap-2">
+                <div className="font-bold text-sm text-rojo flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-rojo/10 text-rojo flex items-center justify-center text-xs">3</span>
+                  Vincular el Webhook
+                </div>
+                <p className="text-xs text-t2 m-0 leading-relaxed">
+                  En <b>WhatsApp &gt; Configuración</b>, pulsa en <b>Editar Webhook</b>. Pega la URL del Webhook y tu Token de verificación. Luego suscríbete al campo <b>messages</b>.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white border border-borde flex flex-col gap-2">
+                <div className="font-bold text-sm text-rojo flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-rojo/10 text-rojo flex items-center justify-center text-xs">4</span>
+                  Probar y Activar
+                </div>
+                <p className="text-xs text-t2 m-0 leading-relaxed">
+                  Envía un mensaje de prueba con el botón de arriba para verificar que todo responde. Cuando quieras abrirlo al público, marca la casilla <b>WhatsApp Activo</b> y pulsa Guardar.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

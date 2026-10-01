@@ -30,7 +30,15 @@ function guardarId(clave: string, id: string | null) {
  * asistente»: escribe en su propia ruta, guarda su chat aparte y cabe dentro
  * de la pantalla del taller.
  */
-export function ChatPublico({ prueba = false, taller }: { prueba?: boolean; taller?: DatosTaller }) {
+export function ChatPublico({
+  prueba = false,
+  taller,
+  telefonoWhatsApp,
+}: {
+  prueba?: boolean;
+  taller?: DatosTaller;
+  telefonoWhatsApp?: string;
+}) {
   const clave = prueba ? `${CLAVE}-prueba` : CLAVE;
   const [chat, setChat] = useState<VistaChatPublico | null>(null);
   const [borrador, setBorrador] = useState('');
@@ -163,6 +171,17 @@ export function ChatPublico({ prueba = false, taller }: { prueba?: boolean; tall
           </div>
           <div className="text-[13px]">{chat?.atiende ?? 'Asistente del taller · contesta al momento'}</div>
         </div>
+        {telefonoWhatsApp && !prueba && (
+          <a
+            href={`https://wa.me/${telefonoWhatsApp.replace(/\D/g, '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir WhatsApp"
+            className="text-xs font-semibold bg-white/20 hover:bg-white/30 text-white rounded-full px-2.5 py-1 shrink-0 flex items-center gap-1 transition-colors"
+          >
+            <span>💬</span> WhatsApp
+          </a>
+        )}
         {chat && (
           <button type="button" onClick={nuevoChat} disabled={enviando} className="text-xs font-semibold border border-white/60 rounded-full px-2.5 py-1 shrink-0 disabled:opacity-50">
             Nuevo chat
@@ -198,13 +217,25 @@ export function ChatPublico({ prueba = false, taller }: { prueba?: boolean; tall
           </Link>
         )}
         {!chat && !enviando && (
-          <div className="flex flex-wrap gap-2 mt-1">
-            {SUGERENCIAS.map((s) => (
-              <button key={s} type="button" onClick={() => void enviar(s)}
-                className="h-11 px-4 rounded-[22px] border-[1.5px] border-rojo bg-white text-rojo text-[15px] font-semibold">
-                {s}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 mt-1">
+            <div className="flex flex-wrap gap-2">
+              {SUGERENCIAS.map((s) => (
+                <button key={s} type="button" onClick={() => void enviar(s)}
+                  className="h-11 px-4 rounded-[22px] border-[1.5px] border-rojo bg-white text-rojo text-[15px] font-semibold">
+                  {s}
+                </button>
+              ))}
+            </div>
+            {telefonoWhatsApp && !prueba && (
+              <a
+                href={`https://wa.me/${telefonoWhatsApp.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#25D366]/10 text-[#075E54] hover:bg-[#25D366]/20 font-semibold text-sm transition-colors border border-[#25D366]/30 text-center"
+              >
+                <span>💬</span> ¿Prefieres hablar por WhatsApp? Chatea con nosotros aquí
+              </a>
+            )}
           </div>
         )}
       </div>

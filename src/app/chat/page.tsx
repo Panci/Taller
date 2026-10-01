@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { ChatPublico } from '@/components/chat/chat-publico';
-import { leerDatosTaller } from '@/lib/ajustes';
+import { leerDatosTaller, leerConfiguracionWhatsApp } from '@/lib/ajustes';
 
 export async function generateMetadata(): Promise<Metadata> {
   const taller = await leerDatosTaller();
@@ -11,12 +11,21 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // Página pública para clientes. Cada chat nuevo entra en la bandeja del
-// taller con el canal "Web".
+// taller con el canal "Web" o pueden saltar directamente a WhatsApp si está activo.
 export default async function PaginaChat() {
-  const taller = await leerDatosTaller();
+  const [taller, configWhatsApp] = await Promise.all([
+    leerDatosTaller(),
+    leerConfiguracionWhatsApp(),
+  ]);
+
+  const telefonoWhatsApp =
+    configWhatsApp.activo && configWhatsApp.telefonoVisible?.trim()
+      ? configWhatsApp.telefonoVisible.trim()
+      : undefined;
+
   return (
     <main className="min-h-dvh flex justify-center items-start sm:items-center sm:p-6">
-      <ChatPublico taller={taller} />
+      <ChatPublico taller={taller} telefonoWhatsApp={telefonoWhatsApp} />
     </main>
   );
 }

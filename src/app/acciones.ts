@@ -13,13 +13,17 @@ import {
   guardarDatosTaller,
   guardarConfiguracionIA,
   guardarTrabajadorTaller,
+  guardarConfiguracionWhatsApp,
+  leerConfiguracionWhatsApp,
   type DatosTaller,
   type ConfiguracionIA,
+  type ConfiguracionWhatsApp,
 } from '@/lib/ajustes';
+import { enviarMensajeWhatsApp } from '@/lib/whatsapp';
 import { probarConexionOpenRouter } from '@/lib/ia/openrouter';
 import { dbSesion, personaActual } from '@/lib/sesion';
 import { puedeEditarTarifa, puedeTocarOrden } from '@/lib/permisos';
-import { cochePorMatricula, leerOrden, leerTarifa, ordenAbiertaDe } from '@/lib/datos';
+import { cochePorMatricula, leerConversacion, leerOrden, leerTarifa, ordenAbiertaDe } from '@/lib/datos';
 import { servicioDe } from '@/lib/calculos';
 import { aNumero } from '@/lib/formato';
 import { firmaInforme } from '@/lib/ia/informe';
@@ -339,6 +343,28 @@ export async function cambiarClaveTrabajadorAccion(personaId: string, clave: str
   });
 }
 
+// ——— WhatsApp (solo el dueño) ———
+
+export async function guardarConfiguracionWhatsAppAccion(config: ConfiguracionWhatsApp): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const r = await guardarConfiguracionWhatsApp(db, config);
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? 'Configuración de WhatsApp guardada en la base de datos.'
+        : 'Configuración de WhatsApp guardada en tu navegador.',
+    };
+  });
+}
+
+export async function probarEnvioWhatsAppAccion(telefono: string, texto: string): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const r = await enviarMensajeWhatsApp(telefono, texto, undefined, db);
+    if (!r.ok) return { ok: false, error: r.error || 'Error al enviar el mensaje de prueba.' };
+    return { ok: true, mensaje: `¡Mensaje enviado con éxito por WhatsApp! ID: ${r.messageId || 'OK'}` };
+  });
+}
+
 // ——— Tarifa (solo el dueño) ———
 
 export async function guardarServicioAccion(d: Omit<op.DatosServicio, 'precio'> & { precio: string }): Promise<Resultado> {
@@ -362,6 +388,17 @@ export async function borrarServicioAccion(id: string): Promise<Resultado> {
 export async function enviarMensajeAccion(conversacionId: string, textoMensaje: string): Promise<Resultado> {
   return ejecutar(esEscritorio, async (_a, db) => {
     await op.mensajeDelTaller(db, conversacionId, textoMensaje);
+    try {
+      const conv = await leerConversacion(db, conversacionId);
+      if (conv && conv.canal === 'WhatsApp' && conv.contacto) {
+        const cfg = await leerConfiguracionWhatsApp(db);
+        if (cfg.activo) {
+          await enviarMensajeWhatsApp(conv.contacto, textoMensaje, cfg, db);
+        }
+      }
+    } catch (err) {
+      console.error('[enviarMensajeAccion WhatsApp]', err);
+    }
   });
 }
 

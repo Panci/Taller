@@ -16,12 +16,14 @@ const CLAVE_HORARIO = 'horarios_citas';
 const CLAVE_TALLER = 'datos_taller';
 const CLAVE_IA = 'ia_config';
 const CLAVE_TRABAJADORES = 'trabajadores_taller';
+const CLAVE_WHATSAPP = 'whatsapp_config';
 
 // Claves de cookies para máxima resiliencia
 const COOKIE_HORARIO = 'taller_horario_cfg';
 const COOKIE_TALLER = 'taller_datos_cfg';
 const COOKIE_IA = 'taller_ia_cfg';
 const COOKIE_TRABAJADORES = 'taller_trabajadores_cfg';
+const COOKIE_WHATSAPP = 'taller_whatsapp_cfg';
 
 async function resolverDb(db?: Db | null): Promise<Db | null> {
   if (db) return db;
@@ -451,3 +453,116 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
 
   return { ok: true, enBd };
 }
+
+// ——— CONFIGURACIÓN DE WHATSAPP (META CLOUD API) ———
+
+export interface ConfiguracionWhatsApp {
+  activo: boolean;
+  token: string;
+  phoneId: string;
+  verifyToken: string;
+  telefonoVisible: string;
+}
+
+export const CONFIG_WHATSAPP_DEFECTO: ConfiguracionWhatsApp = {
+  activo: false,
+  token: '',
+  phoneId: '',
+  verifyToken: 'taller_secreto_whatsapp',
+  telefonoVisible: '',
+};
+
+let memoriaConfigWhatsApp: ConfiguracionWhatsApp | null = null;
+
+export async function leerConfiguracionWhatsApp(db?: Db | null): Promise<ConfiguracionWhatsApp> {
+  let res: ConfiguracionWhatsApp = memoriaConfigWhatsApp
+    ? { ...memoriaConfigWhatsApp }
+    : {
+        activo: process.env.WHATSAPP_ACTIVO === 'true',
+        token: process.env.WHATSAPP_TOKEN?.trim() || '',
+        phoneId: process.env.WHATSAPP_PHONE_ID?.trim() || '',
+        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN?.trim() || CONFIG_WHATSAPP_DEFECTO.verifyToken,
+        telefonoVisible: process.env.WHATSAPP_NUMERO_PUBLICO?.trim() || '',
+      };
+
+  const cliente = await resolverDb(db);
+  if (cliente) {
+    try {
+      const { data, error } = await cliente
+        .from('ajustes')
+        .select('valor')
+        .eq('clave', CLAVE_WHATSAPP)
+        .maybeSingle();
+
+      if (!error && data?.valor && typeof data.valor === 'object') {
+        const v = data.valor as Record<string, unknown>;
+        res = {
+          activo: Boolean(v.activo),
+          token: typeof v.token === 'string' ? v.token.trim() : res.token,
+          phoneId: typeof v.phoneId === 'string' ? v.phoneId.trim() : res.phoneId,
+          verifyToken: typeof v.verifyToken === 'string' && v.verifyToken.trim() ? v.verifyToken.trim() : res.verifyToken,
+          telefonoVisible: typeof v.telefonoVisible === 'string' ? v.telefonoVisible.trim() : res.telefonoVisible,
+        };
+        memoriaConfigWhatsApp = res;
+        return res;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  try {
+    const c = await cookies();
+    const raw = c.get(COOKIE_WHATSAPP)?.value;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        res = {
+          activo: Boolean(parsed.activo),
+          token: typeof parsed.token === 'string' ? parsed.token.trim() : res.token,
+          phoneId: typeof parsed.phoneId === 'string' ? parsed.phoneId.trim() : res.phoneId,
+          verifyToken: typeof parsed.verifyToken === 'string' && parsed.verifyToken.trim() ? parsed.verifyToken.trim() : res.verifyToken,
+          telefonoVisible: typeof parsed.telefonoVisible === 'string' ? parsed.telefonoVisible.trim() : res.telefonoVisible,
+        };
+        memoriaConfigWhatsApp = res;
+        return res;
+      }
+    }
+  } catch {
+    //
+  }
+
+  return res;
+}
+
+export async function guardarConfiguracionWhatsApp(db: Db, config: ConfiguracionWhatsApp): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
+  let enBd = false;
+  memoriaConfigWhatsApp = { ...config };
+
+  try {
+    const { error } = await db.from('ajustes').upsert({
+      clave: CLAVE_WHATSAPP,
+      valor: config as unknown as Json,
+      actualizado: new Date().toISOString(),
+    });
+    if (!error) enBd = true;
+  } catch {
+    //
+  }
+
+  try {
+    const c = await cookies();
+    c.set(COOKIE_WHATSAPP, JSON.stringify(config), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+    });
+  } catch {
+    //
+  }
+
+  return { ok: true, enBd };
+}
+
