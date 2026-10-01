@@ -13,6 +13,7 @@ import {
   guardarDatosTaller,
   guardarConfiguracionIA,
   guardarTrabajadorTaller,
+  eliminarTrabajadorTaller,
   guardarConfiguracionWhatsApp,
   leerConfiguracionWhatsApp,
   type DatosTaller,
@@ -324,8 +325,54 @@ export async function guardarTrabajadorAccion(p: Persona): Promise<Resultado> {
     return {
       ok: true,
       mensaje: r.enBd
-        ? `Trabajador ${p.nombre} actualizado en la base de datos.`
+        ? `Trabajador ${p.nombre} guardado en la base de datos.`
         : `Trabajador ${p.nombre} actualizado en tu navegador.`,
+    };
+  });
+}
+
+export async function crearTrabajadorAccion(p: Persona, claveInicial?: string): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const id = (p.id || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (id.length < 2 || id.length > 30) {
+      throw new op.ErrorNegocio('El identificador de usuario debe tener entre 2 y 30 caracteres (letras, números o guiones).');
+    }
+    if (!p.nombre?.trim()) throw new op.ErrorNegocio('Escribe el nombre del trabajador.');
+    if (!p.nombreCompleto?.trim()) throw new op.ErrorNegocio('Escribe el nombre y apellidos completos.');
+    if (!['dueno', 'recepcion', 'mecanico'].includes(p.rol)) throw new op.ErrorNegocio('El rol no es válido.');
+    if (claveInicial && claveInicial.length < 10) {
+      throw new op.ErrorNegocio('La contraseña inicial debe tener al menos 10 caracteres.');
+    }
+
+    const personaNormalizada: Persona = {
+      ...p,
+      id: id as PersonaId,
+      nombre: p.nombre.trim(),
+      nombreCompleto: p.nombreCompleto.trim(),
+      rolEtiqueta: p.rolEtiqueta?.trim() || (p.rol === 'dueno' ? 'Dueño' : p.rol === 'recepcion' ? 'Recepción' : 'Mecánico'),
+    };
+
+    const r = await guardarTrabajadorTaller(db, personaNormalizada, claveInicial?.trim());
+    revalidatePath('/', 'layout');
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? `Trabajador ${personaNormalizada.nombre} (@${personaNormalizada.id}) creado en la base de datos.`
+        : `Trabajador ${personaNormalizada.nombre} creado correctamente.`,
+    };
+  });
+}
+
+export async function eliminarTrabajadorAccion(id: string): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    if (id === 'paco') throw new op.ErrorNegocio('No se puede eliminar la cuenta principal del dueño.');
+    const r = await eliminarTrabajadorTaller(db, id);
+    revalidatePath('/', 'layout');
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? 'Trabajador eliminado de la base de datos.'
+        : 'Trabajador eliminado.',
     };
   });
 }

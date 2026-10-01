@@ -328,38 +328,12 @@ export async function guardarConfiguracionIA(db: Db, config: ConfiguracionIA): P
 export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]> {
   const cliente = await resolverDb(db);
 
-  // 1. Prioridad: leer de la tabla 'ajustes' (donde se guardan las personalizaciones)
-  if (cliente) {
-    try {
-      const { data, error } = await cliente
-        .from('ajustes')
-        .select('valor')
-        .eq('clave', CLAVE_TRABAJADORES)
-        .maybeSingle();
-
-      if (!error && Array.isArray(data?.valor) && data.valor.length > 0) {
-        const guardados = data.valor as unknown as Persona[];
-        const res = PERSONAS.map((base) => {
-          const modificado = guardados.find((g) => g.id === base.id);
-          return modificado ? { ...base, ...modificado } : base;
-        });
-        for (const g of guardados) {
-          if (!res.some((r) => r.id === g.id)) res.push(g);
-        }
-        actualizarMemoriaTrabajadores(res);
-        return res;
-      }
-    } catch {
-      // Fallback
-    }
-  }
-
-  // 2. Si no hay ajustes guardados, leer de la tabla 'personas'
+  // 1. Intentar leer de la tabla 'personas' en Supabase (fuente principal de datos)
   if (cliente) {
     try {
       const { data, error } = await cliente.from('personas').select('*');
       if (!error && Array.isArray(data) && data.length > 0) {
-        const res = data.map((f: { id: string; nombre: string; nombre_completo: string; rol: string; rol_etiqueta: string }) => ({
+        const res: Persona[] = data.map((f: { id: string; nombre: string; nombre_completo: string; rol: string; rol_etiqueta: string }) => ({
           id: f.id as Persona['id'],
           nombre: f.nombre,
           nombreCompleto: f.nombre_completo,
@@ -374,6 +348,29 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
     }
   }
 
+  // 2. Si personas falla o está vacía, leer de la tabla 'ajustes'
+  if (cliente) {
+    try {
+      const { data, error } = await cliente
+        .from('ajustes')
+        .select('valor')
+        .eq('clave', CLAVE_TRABAJADORES)
+        .maybeSingle();
+
+      if (!error && Array.isArray(data?.valor) && data.valor.length > 0) {
+        const guardados = (data.valor as unknown as Persona[]).filter(
+          (p) => p && typeof p.id === 'string' && typeof p.nombre === 'string'
+        );
+        if (guardados.length > 0) {
+          actualizarMemoriaTrabajadores(guardados);
+          return guardados;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
   // 3. Fallback con cookie
   try {
     const c = await cookies();
@@ -381,12 +378,9 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const res = PERSONAS.map((base) => {
-          const modificado = parsed.find((g: Persona) => g.id === base.id);
-          return modificado ? { ...base, ...modificado } : base;
-        });
-        actualizarMemoriaTrabajadores(res);
-        return res;
+        const guardados = parsed as Persona[];
+        actualizarMemoriaTrabajadores(guardados);
+        return guardados;
       }
     }
   } catch {
@@ -397,10 +391,41 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
   return PERSONAS;
 }
 
-export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
+export async function guardarTrabajadorTaller(
+  db: Db,
+  p: Persona,
+  claveNueva?: string
+): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
   let enBd = false;
 
-  // 1. Guardar lista en ajustes y actualizar memoria
+  // 1. Intentar llamar al RPC crear_trabajador (inserta en personas y crea usuario auth con clave si es nuevo)
+  try {
+    const { error: rpcError } = await db.rpc('crear_trabajador', {
+      p_id: p.id,
+      p_nombre: p.nombre,
+      p_nombre_completo: p.nombreCompleto,
+      p_rol: p.rol,
+      p_rol_etiqueta: p.rolEtiqueta,
+      p_clave: claveNueva || null,
+    });
+    if (!rpcError) {
+      enBd = true;
+    } else {
+      console.warn('[guardarTrabajadorTaller] RPC error, intentando upsert directo:', rpcError.message);
+      const { error: errorPersonas } = await db.from('personas').upsert({
+        id: p.id,
+        nombre: p.nombre,
+        nombre_completo: p.nombreCompleto,
+        rol: p.rol,
+        rol_etiqueta: p.rolEtiqueta,
+      });
+      if (!errorPersonas) enBd = true;
+    }
+  } catch (e) {
+    console.warn('[guardarTrabajadorTaller] Error en personas:', e);
+  }
+
+  // 2. Guardar lista en ajustes, cookies y memoria
   try {
     const actuales = await leerTrabajadoresTaller(db);
     const idx = actuales.findIndex((x) => x.id === p.id);
@@ -415,11 +440,7 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
       valor: nuevaLista as unknown as Json,
       actualizado: new Date().toISOString(),
     });
-    if (!errorAjustes) {
-      enBd = true;
-    } else {
-      console.error('[guardarTrabajadorTaller] Error en tabla ajustes:', errorAjustes);
-    }
+    if (!errorAjustes) enBd = true;
 
     try {
       const c = await cookies();
@@ -434,21 +455,64 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
       //
     }
   } catch (e) {
-    console.error('[guardarTrabajadorTaller] Error procesando lista:', e);
+    console.error('[guardarTrabajadorTaller] Error en ajustes:', e);
   }
 
-  // 2. Intentar actualizar también la tabla personas en Supabase
+  return { ok: true, enBd };
+}
+
+export async function eliminarTrabajadorTaller(
+  db: Db,
+  id: string
+): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
+  if (id === 'paco') {
+    throw new Error('No se puede eliminar la cuenta principal del dueño.');
+  }
+
+  let enBd = false;
+
+  // 1. Intentar llamar al RPC eliminar_trabajador (borra de personas, reasigna órdenes y borra de auth)
   try {
-    const { error: errorPersonas } = await db.from('personas').upsert({
-      id: p.id,
-      nombre: p.nombre,
-      nombre_completo: p.nombreCompleto,
-      rol: p.rol,
-      rol_etiqueta: p.rolEtiqueta,
+    const { error: errorRpc } = await db.rpc('eliminar_trabajador', { p_persona: id });
+    if (!errorRpc) {
+      enBd = true;
+    } else {
+      console.warn('[eliminarTrabajadorTaller] RPC error, intentando delete directo:', errorRpc.message);
+      const { error: errorDelete } = await db.from('personas').delete().eq('id', id);
+      if (!errorDelete) enBd = true;
+    }
+  } catch (e) {
+    console.warn('[eliminarTrabajadorTaller] Error en personas:', e);
+  }
+
+  // 2. Actualizar lista en ajustes, cookies y memoria
+  try {
+    const actuales = await leerTrabajadoresTaller(db);
+    const nuevaLista = actuales.filter((x) => x.id !== id);
+
+    actualizarMemoriaTrabajadores(nuevaLista);
+
+    const { error: errorAjustes } = await db.from('ajustes').upsert({
+      clave: CLAVE_TRABAJADORES,
+      valor: nuevaLista as unknown as Json,
+      actualizado: new Date().toISOString(),
     });
-    if (!errorPersonas) enBd = true;
-  } catch {
-    //
+    if (!errorAjustes) enBd = true;
+
+    try {
+      const c = await cookies();
+      c.set(COOKIE_TRABAJADORES, JSON.stringify(nuevaLista), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 365 * 24 * 60 * 60,
+      });
+    } catch {
+      //
+    }
+  } catch (e) {
+    console.error('[eliminarTrabajadorTaller] Error en ajustes:', e);
   }
 
   return { ok: true, enBd };

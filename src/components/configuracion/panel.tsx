@@ -8,6 +8,8 @@ import {
   guardarConfiguracionIAAccion,
   probarClaveIAAccion,
   guardarTrabajadorAccion,
+  crearTrabajadorAccion,
+  eliminarTrabajadorAccion,
   cambiarClaveTrabajadorAccion,
   guardarConfiguracionWhatsAppAccion,
   probarEnvioWhatsAppAccion,
@@ -54,8 +56,19 @@ export function PanelConfiguracion({
   const [resultadoPruebaWhatsApp, setResultadoPruebaWhatsApp] = useState<{ ok: boolean; mensaje: string } | null>(null);
   const [copiadoWebhook, setCopiadoWebhook] = useState(false);
 
+  // ——— Estado Trabajadores ———
   const [trabajadores, setTrabajadores] = useState<Persona[]>(trabajadoresInicial);
   const [trabajadorEditando, setTrabajadorEditando] = useState<Persona | null>(null);
+  const [creandoTrabajador, setCreandoTrabajador] = useState(false);
+  const [nuevoTrabajador, setNuevoTrabajador] = useState({
+    id: '',
+    nombre: '',
+    nombreCompleto: '',
+    rol: 'mecanico' as Persona['rol'],
+    rolEtiqueta: 'Mecánico',
+    clave: '',
+  });
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [cambiandoClaveId, setCambiandoClaveId] = useState<string | null>(null);
   const [nuevaClave, setNuevaClave] = useState('');
   const [repetirClave, setRepetirClave] = useState('');
@@ -182,6 +195,47 @@ export function PanelConfiguracion({
           setTrabajadores((prev) => prev.map((t) => (t.id === trabajadorEditando.id ? trabajadorEditando : t)));
           setTrabajadorEditando(null);
           avisar(r.mensaje || 'Trabajador guardado.');
+          router.refresh();
+        }
+      }
+    );
+  };
+
+  // ——— Crear Nuevo Trabajador ———
+  const handleCrearTrabajador = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoTrabajador.id.trim() || !nuevoTrabajador.nombre.trim()) return;
+    ejecutar(
+      () =>
+        crearTrabajadorAccion(
+          {
+            id: nuevoTrabajador.id.trim().toLowerCase() as Persona['id'],
+            nombre: nuevoTrabajador.nombre.trim(),
+            nombreCompleto: nuevoTrabajador.nombreCompleto.trim(),
+            rol: nuevoTrabajador.rol,
+            rolEtiqueta: nuevoTrabajador.rolEtiqueta.trim(),
+          },
+          nuevoTrabajador.clave?.trim()
+        ),
+      (r) => {
+        if (r.ok) {
+          avisar(r.mensaje || 'Trabajador añadido correctamente.');
+          setCreandoTrabajador(false);
+          router.refresh();
+        }
+      }
+    );
+  };
+
+  // ——— Eliminar Trabajador ———
+  const handleEliminarTrabajador = (id: string) => {
+    ejecutar(
+      () => eliminarTrabajadorAccion(id),
+      (r) => {
+        if (r.ok) {
+          setTrabajadores((prev) => prev.filter((t) => t.id !== id));
+          setEliminandoId(null);
+          avisar(r.mensaje || 'Trabajador eliminado correctamente.');
           router.refresh();
         }
       }
@@ -393,9 +447,26 @@ export function PanelConfiguracion({
             <div>
               <h2 className="text-xl font-bold m-0">Equipo del Taller</h2>
               <p className="text-sm text-t2 mt-1 mb-0">
-                Gestiona los nombres, roles y contraseñas de acceso para cada trabajador.
+                Gestiona los nombres, roles, altas, bajas y contraseñas de acceso para cada trabajador.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setNuevoTrabajador({
+                  id: '',
+                  nombre: '',
+                  nombreCompleto: '',
+                  rol: 'mecanico',
+                  rolEtiqueta: 'Mecánico',
+                  clave: '',
+                });
+                setCreandoTrabajador(true);
+              }}
+              className="btn btn-rojo h-10 px-4 text-sm font-semibold flex items-center gap-2"
+            >
+              <span>➕</span> Añadir nuevo trabajador
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -453,6 +524,16 @@ export function PanelConfiguracion({
                     >
                       🔑 Cambiar contraseña
                     </button>
+                    {t.id !== 'paco' && !esDueno && (
+                      <button
+                        type="button"
+                        onClick={() => setEliminandoId(t.id)}
+                        className="btn btn-borde h-9 px-3 text-sm font-semibold text-rojo hover:bg-rojo-50 hover:border-rojo-300 ml-auto"
+                        title="Eliminar trabajador"
+                      >
+                        🗑️ Eliminar
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -603,6 +684,182 @@ export function PanelConfiguracion({
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Crear Nuevo Trabajador */}
+          {creandoTrabajador && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-borde flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold m-0">Añadir nuevo trabajador</h3>
+                  <button
+                    type="button"
+                    onClick={() => setCreandoTrabajador(false)}
+                    className="text-t2 hover:text-tinta text-xl leading-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleCrearTrabajador} className="flex flex-col gap-3.5">
+                  <label className="etiqueta">
+                    Nombre de usuario (para iniciar sesión)
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t2 font-semibold">@</span>
+                      <input
+                        type="text"
+                        required
+                        pattern="^[a-zA-Z0-9_-]{2,30}$"
+                        className="campo h-11 text-base pl-8 font-mono lowercase"
+                        value={nuevoTrabajador.id}
+                        onChange={(e) =>
+                          setNuevoTrabajador({
+                            ...nuevoTrabajador,
+                            id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+                          })
+                        }
+                        placeholder="ej. carlos, mario, ana..."
+                      />
+                    </div>
+                    <span className="text-xs text-t2 mt-0.5">
+                      Solo letras minúsculas, números o guiones (ej. carlos).
+                    </span>
+                  </label>
+
+                  <label className="etiqueta">
+                    Nombre corto (para botones y citas)
+                    <input
+                      type="text"
+                      required
+                      className="campo h-11 text-base mt-1"
+                      value={nuevoTrabajador.nombre}
+                      onChange={(e) =>
+                        setNuevoTrabajador({ ...nuevoTrabajador, nombre: e.target.value })
+                      }
+                      placeholder="Ej. Carlos"
+                    />
+                  </label>
+
+                  <label className="etiqueta">
+                    Nombre y apellidos completo
+                    <input
+                      type="text"
+                      required
+                      className="campo h-11 text-base mt-1"
+                      value={nuevoTrabajador.nombreCompleto}
+                      onChange={(e) =>
+                        setNuevoTrabajador({ ...nuevoTrabajador, nombreCompleto: e.target.value })
+                      }
+                      placeholder="Ej. Carlos Gómez"
+                    />
+                  </label>
+
+                  <label className="etiqueta">
+                    Rol en la aplicación
+                    <select
+                      className="campo h-11 text-base mt-1"
+                      value={nuevoTrabajador.rol}
+                      onChange={(e) => {
+                        const rol = e.target.value as Persona['rol'];
+                        const etiqueta =
+                          rol === 'dueno' ? 'Dueño' : rol === 'recepcion' ? 'Recepción' : 'Mecánico';
+                        setNuevoTrabajador({ ...nuevoTrabajador, rol, rolEtiqueta: etiqueta });
+                      }}
+                    >
+                      <option value="mecanico">Mecánico (vista móvil con sus coches)</option>
+                      <option value="recepcion">Recepción (citas, clientes y tablero)</option>
+                      <option value="dueno">Dueño (acceso total)</option>
+                    </select>
+                  </label>
+
+                  <label className="etiqueta">
+                    Etiqueta visible del puesto
+                    <input
+                      type="text"
+                      required
+                      className="campo h-11 text-base mt-1"
+                      value={nuevoTrabajador.rolEtiqueta}
+                      onChange={(e) =>
+                        setNuevoTrabajador({ ...nuevoTrabajador, rolEtiqueta: e.target.value })
+                      }
+                      placeholder="Ej. Mecánico, Mecánica, Oficial de 1ª..."
+                    />
+                  </label>
+
+                  <label className="etiqueta">
+                    Contraseña de acceso inicial (mínimo 10 caracteres)
+                    <input
+                      type="password"
+                      required
+                      minLength={10}
+                      className="campo h-11 text-base mt-1"
+                      value={nuevoTrabajador.clave}
+                      onChange={(e) =>
+                        setNuevoTrabajador({ ...nuevoTrabajador, clave: e.target.value })
+                      }
+                      placeholder="••••••••••"
+                    />
+                    <span className="text-xs text-t2 mt-0.5">
+                      Podrá cambiarse en cualquier momento desde esta misma pantalla.
+                    </span>
+                  </label>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setCreandoTrabajador(false)}
+                      className="btn btn-borde h-10 px-4 text-sm"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={pendiente}
+                      className="btn btn-rojo h-10 px-5 text-sm font-semibold"
+                    >
+                      {pendiente ? 'Creando…' : 'Crear trabajador'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Confirmar Eliminación */}
+          {eliminandoId && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-borde flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center gap-3 text-rojo">
+                  <span className="text-2xl">⚠️</span>
+                  <h3 className="text-lg font-bold m-0 text-tinta">Eliminar trabajador</h3>
+                </div>
+                <p className="text-sm text-t2 m-0 leading-relaxed">
+                  ¿Estás seguro de que deseas eliminar a{' '}
+                  <b className="text-tinta">
+                    {trabajadores.find((t) => t.id === eliminandoId)?.nombreCompleto || eliminandoId}
+                  </b>{' '}
+                  (@{eliminandoId})? Se borrará su acceso a la aplicación.
+                </p>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEliminandoId(null)}
+                    className="btn btn-borde h-10 px-4 text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pendiente}
+                    onClick={() => handleEliminarTrabajador(eliminandoId)}
+                    className="btn btn-rojo h-10 px-5 text-sm font-semibold"
+                  >
+                    {pendiente ? 'Eliminando…' : 'Sí, eliminar trabajador'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

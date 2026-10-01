@@ -53,16 +53,12 @@ export function actualizarMemoriaTaller(datos: Partial<typeof TALLER>) {
 }
 
 export function actualizarMemoriaTrabajadores(lista: Persona[]) {
-  for (const t of lista) {
-    const idx = PERSONAS.findIndex((p) => p.id === t.id);
-    if (idx >= 0) {
-      PERSONAS[idx] = { ...PERSONAS[idx], ...t };
-    } else {
-      PERSONAS.push(t);
-    }
+  if (lista && lista.length > 0) {
+    PERSONAS.length = 0;
+    PERSONAS.push(...lista);
+    MECANICOS.length = 0;
+    MECANICOS.push(...PERSONAS.filter((p) => p.rol === 'mecanico'));
   }
-  MECANICOS.length = 0;
-  MECANICOS.push(...PERSONAS.filter((p) => p.rol === 'mecanico'));
 }
 
 export function persona(id: PersonaId | string): Persona | undefined {
