@@ -1,14 +1,16 @@
 import Link from 'next/link';
-import { personaObligatoria } from '@/lib/sesion';
+import { dbSesion, personaObligatoria } from '@/lib/sesion';
 import { inicioDe } from '@/lib/permisos';
-import { PERSONAS } from '@/lib/constantes';
+import { leerTrabajadoresTaller } from '@/lib/ajustes';
 import { FormClaveEquipo, FormMiClave } from '@/components/cuenta';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PaginaCuenta() {
   const yo = await personaObligatoria();
-  const otros = PERSONAS.filter((p) => p.id !== yo.id).map((p) => ({ id: p.id, nombre: `${p.nombreCompleto} (${p.rolEtiqueta.toLowerCase()})` }));
+  const db = await dbSesion();
+  const trabajadores = await leerTrabajadoresTaller(db);
+  const otros = trabajadores.filter((p) => p.id !== yo.id).map((p) => ({ id: p.id, nombre: `${p.nombreCompleto} (${p.rolEtiqueta.toLowerCase()})` }));
   return (
     <main className="px-4 sm:px-7 pt-5 pb-12 flex flex-col gap-4 max-w-[560px] w-full mx-auto">
       <Link href={inicioDe(yo)} className="self-start text-t2 text-sm font-semibold py-1 hover:text-tinta">‹ Volver</Link>

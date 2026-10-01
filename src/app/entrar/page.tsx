@@ -5,11 +5,15 @@ import { personaActual } from '@/lib/sesion';
 import { supabaseConfigurado } from '@/lib/supabase/servidor';
 import { inicioDe } from '@/lib/permisos';
 import { FormEntrar } from '@/components/entrar';
+import { leerDatosTaller } from '@/lib/ajustes';
 
-export const metadata: Metadata = {
-  title: 'Entrar · Talleres Ruiz',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const taller = await leerDatosTaller();
+  return {
+    title: `Entrar · ${taller.nombre}`,
+    robots: { index: false, follow: false },
+  };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -17,14 +21,27 @@ export default async function PaginaEntrar() {
   const yo = await personaActual();
   if (yo) redirect(inicioDe(yo));
 
+  const taller = await leerDatosTaller();
+  const iniciales = taller.nombre
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('') || 'TR';
+  const subtitulo = taller.lema
+    ? `${taller.lema}${taller.ciudad ? ` · ${taller.ciudad}` : ''}`
+    : (taller.ciudad || 'Taller mecánico');
+
   return (
     <main className="min-h-dvh flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[400px] flex flex-col gap-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-rojo rounded-md text-white font-bold text-lg flex items-center justify-center shrink-0">TR</div>
+          <div className="w-12 h-12 bg-rojo rounded-md text-white font-bold text-lg flex items-center justify-center shrink-0">
+            {iniciales}
+          </div>
           <div>
-            <div className="font-bold text-xl leading-tight">Talleres Ruiz</div>
-            <div className="text-[13px] text-t2">Mecánica y electricidad del automóvil · Getafe</div>
+            <div className="font-bold text-xl leading-tight">{taller.nombre}</div>
+            <div className="text-[13px] text-t2">{subtitulo}</div>
           </div>
         </div>
 

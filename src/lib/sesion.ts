@@ -6,6 +6,7 @@ import 'server-only';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { PERSONAS } from './constantes';
+import { leerTrabajadoresTaller } from './ajustes';
 import { inicioDe, puedeVer } from './permisos';
 import { clienteSesion, supabaseConfigurado, type Db } from './supabase/servidor';
 import type { Persona, VistaId } from './tipos';
@@ -16,10 +17,13 @@ export const personaActual = cache(async (): Promise<Persona | null> => {
   const { data, error } = await db.auth.getClaims();
   if (error || !data?.claims) return null;
   const app = (data.claims.app_metadata ?? {}) as { persona?: unknown; rol?: unknown };
-  const p = PERSONAS.find((x) => x.id === app.persona);
-  // La persona y el rol tienen que cuadrar con los de la app.
-  if (!p || p.rol !== app.rol) return null;
-  return p;
+  const trabajadores = await leerTrabajadoresTaller(db);
+  const p = trabajadores.find((x) => x.id === app.persona) ?? PERSONAS.find((x) => x.id === app.persona);
+  // La persona tiene que existir.
+  if (!p) return null;
+  // El rol autenticado en app_metadata es la autoridad de seguridad.
+  const rolVerificado = (app.rol as Persona['rol']) || p.rol;
+  return { ...p, rol: rolVerificado };
 });
 
 /** Cliente de Supabase con la sesión de quien ha entrado. */
@@ -27,10 +31,13 @@ export const dbSesion = (): Promise<Db> => clienteSesion();
 
 const sinAcentos = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
-/** Acepta "paco", "Paco", "Lucía", "lucia", "Rubén Ortega"… */
-export function usuarioDe(texto: string): Persona | undefined {
+/** Acepta "paco", "Paco", "Lucía", "lucia", "Rubén Ortega"… y nombres personalizados */
+export function usuarioDe(texto: string, trabajadores?: Persona[]): Persona | undefined {
   const t = sinAcentos(texto);
   if (!t) return undefined;
+  const lista = trabajadores && trabajadores.length > 0 ? trabajadores : PERSONAS;
+  const encontrada = lista.find((p) => p.id === t || sinAcentos(p.nombre) === t || sinAcentos(p.nombreCompleto) === t);
+  if (encontrada) return encontrada;
   return PERSONAS.find((p) => p.id === t || sinAcentos(p.nombre) === t || sinAcentos(p.nombreCompleto) === t);
 }
 

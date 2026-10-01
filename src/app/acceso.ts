@@ -9,6 +9,8 @@ import { inicioDe } from '@/lib/permisos';
 import { PERSONAS } from '@/lib/constantes';
 import { apuntar, consumir, ipDe, olvidar, quedan } from '@/lib/limites';
 import { clienteSuelto, emailDe, supabaseConfigurado } from '@/lib/supabase/servidor';
+import { leerTrabajadoresTaller } from '@/lib/ajustes';
+import type { Persona } from '@/lib/tipos';
 
 export interface EstadoEntrar {
   error: string;
@@ -25,7 +27,10 @@ export async function iniciarSesion(_previo: EstadoEntrar, datos: FormData): Pro
   const clave = String(datos.get('clave') ?? '').slice(0, 200);
   if (!supabaseConfigurado()) return { error: 'La app no está conectada a la base de datos. Revisa .env.local.', usuario };
   const ip = ipDe(await headers());
-  const persona = usuarioDe(usuario);
+
+  const db = await dbSesion();
+  const trabajadores = await leerTrabajadoresTaller(db);
+  const persona = usuarioDe(usuario, trabajadores);
   const porIp = `entrar-ip:${ip}`;
   const porUsuario = `entrar-usuario:${persona?.id ?? 'desconocido'}`;
 
@@ -43,7 +48,6 @@ export async function iniciarSesion(_previo: EstadoEntrar, datos: FormData): Pro
   };
   if (!persona) return fallo();
 
-  const db = await dbSesion();
   const { data, error } = await db.auth.signInWithPassword({ email: emailDe(persona.id), password: clave });
   if (error) {
     if (error.status === 429) return { error: 'Demasiados intentos seguidos. Espera unos minutos y vuelve a probar.', usuario };
@@ -53,15 +57,20 @@ export async function iniciarSesion(_previo: EstadoEntrar, datos: FormData): Pro
     }
     return fallo();
   }
-  // La cuenta tiene que ser de esa persona y con su rol (la del asistente no sirve para entrar).
+  // La cuenta tiene que ser de esa persona (la del asistente no sirve para entrar).
   const app = (data.user?.app_metadata ?? {}) as { persona?: unknown; rol?: unknown };
-  if (app.persona !== persona.id || app.rol !== persona.rol) {
+  if (app.persona !== persona.id) {
     await db.auth.signOut({ scope: 'local' });
     return fallo();
   }
 
+  const personaLogueada: Persona = {
+    ...persona,
+    rol: (app.rol as Persona['rol']) || persona.rol,
+  };
+
   olvidar(porIp);
-  redirect(inicioDe(persona));
+  redirect(inicioDe(personaLogueada));
 }
 
 export async function cerrarSesion(): Promise<void> {
@@ -128,14 +137,14 @@ export async function cambiarMiClave(_previo: EstadoClave, datos: FormData): Pro
 export async function ponerClaveA(_previo: EstadoClave, datos: FormData): Promise<EstadoClave> {
   const yo = await personaActual();
   if (!yo) return { error: 'Tu sesión ha caducado. Vuelve a entrar.', ok: '' };
-  if (yo.rol !== 'dueno') return { error: 'Solo el dueño puede cambiar la contraseña de otra persona.', ok: '' };
-  const quien = PERSONAS.find((p) => p.id === String(datos.get('persona') ?? ''));
+  const db = await dbSesion();
+  const trabajadores = await leerTrabajadoresTaller(db);
+  const quien = trabajadores.find((p) => p.id === String(datos.get('persona') ?? '')) ?? PERSONAS.find((p) => p.id === String(datos.get('persona') ?? ''));
   if (!quien || quien.id === yo.id) return { error: 'Elige a la persona.', ok: '' };
   const nueva = String(datos.get('nueva') ?? '').slice(0, 200);
   const problema = problemaClave(nueva, String(datos.get('repetida') ?? '').slice(0, 200));
   if (problema) return { error: problema, ok: '' };
 
-  const db = await dbSesion();
   const { error } = await db.rpc('poner_clave', { p_persona: quien.id, p_clave: nueva });
   if (error) {
     if (error.code === '22023' || error.code === '42501') return { error: error.message, ok: '' };

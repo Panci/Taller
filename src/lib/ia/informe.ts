@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import type { Coche, Cliente, InformeCliente, InformeInterno, Orden } from '../tipos';
 import { trabajosSinPrecio } from '../calculos';
-import { ESTADOS, ESTADOS_PIEZA, persona } from '../constantes';
+import { ESTADOS, ESTADOS_PIEZA, persona, TALLER } from '../constantes';
 import { fkm } from '../formato';
 import { fmtFecha } from '../fechas';
 import { conZod, ErrorIA, iaConfigurada, mensajeDeError, pedirJSON } from './openrouter';
@@ -59,7 +59,7 @@ function datos(o: Orden, { coche, cliente }: CocheYCliente, version: VersionInfo
   return lineas.join('\n\n');
 }
 
-const SISTEMA_CLIENTE = `Redactas el informe de reparación que Talleres Ruiz entrega al CLIENTE. Escribe en español de España, en lenguaje sencillo y sin jerga de taller: explica cada trabajo como se lo contarías a alguien que no sabe de coches (qué se ha hecho y para qué sirve), en una frase corta. Tutea al cliente.
+const SISTEMA_CLIENTE = () => `Redactas el informe de reparación que ${TALLER.nombre} entrega al CLIENTE. Escribe en español de España, en lenguaje sencillo y sin jerga de taller: explica cada trabajo como se lo contarías a alguien que no sabe de coches (qué se ha hecho y para qué sirve), en una frase corta. Tutea al cliente.
 - "resumen": 2 o 3 frases: por qué vino el coche y cómo queda.
 - "trabajos": un texto por cada trabajo, con el mismo "id" que te doy.
 - "recomendaciones": un texto por cada recomendación, con el mismo "id", explicando qué conviene hacer y por qué.
@@ -118,7 +118,7 @@ export async function redactarInforme(o: Orden, cc: CocheYCliente, version: Vers
         tarea: 'informe_cliente',
         esquema: ESQUEMA_CLIENTE,
         esfuerzo: 'low',
-        mensajes: [{ role: 'system', content: SISTEMA_CLIENTE }, { role: 'user', content: datos(o, cc, 'cliente') }],
+        mensajes: [{ role: 'system', content: SISTEMA_CLIENTE() }, { role: 'user', content: datos(o, cc, 'cliente') }],
         validar: conZod(RespCliente, (x) => conImportes([x.resumen, ...x.trabajos.map((y) => y.texto), ...x.recomendaciones.map((y) => y.texto)])),
       });
       const idsTrabajos = new Set(o.trabajos.map((t) => t.id));

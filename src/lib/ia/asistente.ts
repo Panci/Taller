@@ -16,7 +16,7 @@ import type { Db } from '../supabase/servidor';
 import { cabeceraConversacion, leerConversacion, leerTarifa } from '../datos';
 import { totalOrden } from '../calculos';
 import { ESTADOS, ESTADOS_PIEZA, persona, PERSONAS, TALLER, huecosActivos } from '../constantes';
-import { leerHorarioTaller } from '../ajustes';
+import { leerHorarioTaller, leerDatosTaller } from '../ajustes';
 import { codigosOrdenEn, eur, formatearMatricula, matriculasEn, primerNombre } from '../formato';
 import { fmtCabecera, fmtDiaLargo, fmtDiaMedio, fmtFecha, horaCorta, horaDe } from '../fechas';
 import {
@@ -117,7 +117,7 @@ function textoOrdenVerificada(v: Verificacion): string {
   ].join('\n');
 }
 
-const SISTEMA = (canal: string) => `Eres el asistente de ${TALLER.nombre}, un taller de mecánica y electricidad del automóvil en Getafe (Madrid). Contestas a clientes por ${canal}. Escribe en español de España, con frases cortas y tono cercano y profesional. Tutea, salvo que el cliente trate de usted. No uses emojis ni formato markdown.
+const SISTEMA = (canal: string, taller: { nombre: string; ciudad: string } = TALLER) => `Eres el asistente de ${taller.nombre}, un taller de mecánica y electricidad del automóvil${taller.ciudad ? ` en ${taller.ciudad}` : ''}. Contestas a clientes por ${canal}. Escribe en español de España, con frases cortas y tono cercano y profesional. Tutea, salvo que el cliente trate de usted. No uses emojis ni formato markdown.
 
 SOLO puedes hacer estas tres cosas:
 1. Contar cómo va un coche (su estado, lo que se le ha hecho y cuánto va), usando únicamente los datos de «ORDEN VERIFICADA». Si no hay orden verificada, no das ningún dato de ningún coche (ni estado, ni trabajos, ni importes, ni si está o no en el taller) y pides la matrícula y el código de la orden (empieza por OT, por ejemplo OT-1041, y viene en el resguardo que se le dio al dejar el coche).
@@ -278,7 +278,7 @@ export async function atenderConversacion(db: Db, id: string): Promise<void> {
   const v = await verificarOrden(db, c);
   if (v.codigos.length > MAX_CODIGOS) return pasarAPersona(db, c.id, 'Ha dado muchos códigos de orden distintos', TEXTO_MUCHOS_CODIGOS);
 
-  const [tarifa, horario] = await Promise.all([leerTarifa(db), leerHorarioTaller(db)]);
+  const [tarifa, horario, taller] = await Promise.all([leerTarifa(db), leerHorarioTaller(db), leerDatosTaller(db)]);
   const huecos = await huecosLibres(db, 12, 12, huecosActivos(horario));
   await marcarPensando(db, c.id, true);
   let r: Respuesta;
@@ -289,7 +289,7 @@ export async function atenderConversacion(db: Db, id: string): Promise<void> {
       esfuerzo: 'low',
       maxTokens: 3000,
       mensajes: [
-        { role: 'system', content: SISTEMA(c.canal === 'Web' ? 'el chat de la web' : c.canal) },
+        { role: 'system', content: SISTEMA(c.canal === 'Web' ? 'el chat de la web' : c.canal, taller) },
         { role: 'user', content: contexto(c, v, tarifa, huecos) },
       ],
       validar: conZod(Respuesta, (x) => comprobarRespuesta(x, v, tarifa)),

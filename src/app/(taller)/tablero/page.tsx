@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { dbSesion, exigirVista } from '@/lib/sesion';
 import { conCocheYCliente, ordenesAbiertas, pendientesDePersona } from '@/lib/datos';
-import { DIAS_ALERTA, ESTADOS, ESTADOS_TABLERO, MECANICOS, nombrePersona } from '@/lib/constantes';
+import { DIAS_ALERTA, ESTADOS, ESTADOS_TABLERO, nombrePersona } from '@/lib/constantes';
+import { leerTrabajadoresTaller } from '@/lib/ajustes';
 import { diasEnTaller, etiquetaDias, saludo } from '@/lib/fechas';
 import { Iniciales, Matricula } from '@/components/ui';
 import type { EstadoId, Orden } from '@/lib/tipos';
@@ -12,11 +13,17 @@ const esReciente = (o: Orden) => Boolean(o.ultimaIA && Date.now() - Date.parse(o
 
 export default async function PaginaTablero({ searchParams }: { searchParams: Promise<{ mecanico?: string }> }) {
   const yo = await exigirVista('tablero');
-  const { mecanico } = await searchParams;
-  const filtro = MECANICOS.some((m) => m.id === mecanico) ? mecanico! : 'todos';
-
   const db = await dbSesion();
-  const [completas, pendientes] = await Promise.all([ordenesAbiertas(db).then((o) => conCocheYCliente(db, o)), pendientesDePersona(db)]);
+  const [completas, pendientes, trabajadores] = await Promise.all([
+    ordenesAbiertas(db).then((o) => conCocheYCliente(db, o)),
+    pendientesDePersona(db),
+    leerTrabajadoresTaller(db),
+  ]);
+  const mecanicos = trabajadores.filter((p) => p.rol === 'mecanico');
+
+  const { mecanico } = await searchParams;
+  const filtro = mecanicos.some((m) => m.id === mecanico) ? mecanico! : 'todos';
+
   const abiertas = completas.map((c) => c.orden);
   const datos = new Map(completas.map((c) => [c.orden.id, c]));
   const datosDeOrden = (o: Orden) => datos.get(o.id)!;
@@ -25,13 +32,13 @@ export default async function PaginaTablero({ searchParams }: { searchParams: Pr
     abiertas.filter((o) => o.estado === estado).map((o) => datosDeOrden(o).coche.matricula).join(' · ') || 'Ninguno';
 
   const cifras = [
-    { etiqueta: 'Coches dentro', valor: abiertas.length, color: '#1C1917', sub: MECANICOS.map((m) => `${m.nombre} ${abiertas.filter((o) => o.mecanicoId === m.id).length}`).join(' · '), href: '/tablero' },
+    { etiqueta: 'Coches dentro', valor: abiertas.length, color: '#1C1917', sub: mecanicos.map((m) => `${m.nombre} ${abiertas.filter((o) => o.mecanicoId === m.id).length}`).join(' · '), href: '/tablero' },
     { etiqueta: 'Esperando pieza', valor: abiertas.filter((o) => o.estado === 'pieza').length, color: ESTADOS.pieza.c, sub: matriculas('pieza') },
     { etiqueta: 'Listos para recoger', valor: abiertas.filter((o) => o.estado === 'listo').length, color: ESTADOS.listo.c, sub: matriculas('listo') },
     { etiqueta: 'Necesitan a una persona', valor: pendientes, color: '#B91C1C', sub: 'conversaciones · abrir', href: '/conversaciones?filtro=persona' },
   ];
 
-  const filtros = [{ id: 'todos', nombre: 'Todos' }, ...MECANICOS.map((m) => ({ id: m.id, nombre: m.nombre }))];
+  const filtros = [{ id: 'todos', nombre: 'Todos' }, ...mecanicos.map((m) => ({ id: m.id, nombre: m.nombre }))];
 
   return (
     <main className="px-4 sm:px-7 pt-6 pb-10 flex flex-col gap-5">

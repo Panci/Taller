@@ -48,6 +48,23 @@ export const PERSONAS: Persona[] = [
 
 export const MECANICOS = PERSONAS.filter((p) => p.rol === 'mecanico');
 
+export function actualizarMemoriaTaller(datos: Partial<typeof TALLER>) {
+  Object.assign(TALLER, datos);
+}
+
+export function actualizarMemoriaTrabajadores(lista: Persona[]) {
+  for (const t of lista) {
+    const idx = PERSONAS.findIndex((p) => p.id === t.id);
+    if (idx >= 0) {
+      PERSONAS[idx] = { ...PERSONAS[idx], ...t };
+    } else {
+      PERSONAS.push(t);
+    }
+  }
+  MECANICOS.length = 0;
+  MECANICOS.push(...PERSONAS.filter((p) => p.rol === 'mecanico'));
+}
+
 export function persona(id: PersonaId | string): Persona | undefined {
   return PERSONAS.find((p) => p.id === id);
 }

@@ -1,15 +1,26 @@
 import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { ProveedorAvisos } from '@/components/avisos';
+import { leerDatosTaller } from '@/lib/ajustes';
 import './globals.css';
 
 const sans = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-plex-sans' });
 const mono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600', '700'], variable: '--font-plex-mono' });
 
-export const metadata: Metadata = {
-  title: 'Talleres Ruiz',
-  description: 'Mecánica y electricidad del automóvil · Getafe',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const taller = await leerDatosTaller();
+  const desc = taller.lema
+    ? `${taller.lema}${taller.ciudad ? ` · ${taller.ciudad}` : ''}`
+    : (taller.ciudad || 'Taller mecánico');
+
+  return {
+    title: {
+      template: `%s · ${taller.nombre}`,
+      default: taller.nombre,
+    },
+    description: desc,
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',

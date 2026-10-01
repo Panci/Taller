@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { dbSesion, exigirVista } from '@/lib/sesion';
 import { conversacionDe, datosDeOrden, leerOrden, leerTarifa } from '@/lib/datos';
 import { totalOrden, trabajosSinPrecio } from '@/lib/calculos';
-import { MECANICOS, PERSONAS, persona } from '@/lib/constantes';
+import { persona } from '@/lib/constantes';
+import { leerTrabajadoresTaller } from '@/lib/ajustes';
 import { diasEnTaller, etiquetaDias, fmtFecha, fmtSello } from '@/lib/fechas';
 import { eur, fkm } from '@/lib/formato';
 import { vistaObservacion, vistaPieza, vistaTrabajo } from '@/lib/vistas';
@@ -22,13 +23,17 @@ export default async function PaginaOrden({ params }: { params: Promise<{ id: st
   const db = await dbSesion();
   const o = await leerOrden(db, decodeURIComponent(id));
   if (!o) notFound();
-  const [{ coche, cliente }, tarifa] = await Promise.all([datosDeOrden(db, o), leerTarifa(db)]);
+  const [{ coche, cliente }, tarifa, trabajadores] = await Promise.all([
+    datosDeOrden(db, o),
+    leerTarifa(db),
+    leerTrabajadoresTaller(db),
+  ]);
   const conversacion = await conversacionDe(db, cliente.id);
   const cerrada = o.estado === 'entregado';
   const sinPrecio = trabajosSinPrecio(o);
-  const mecanico = persona(o.mecanicoId);
-  const personas = PERSONAS.map((p) => ({ id: p.id, nombre: p.nombre }));
-  const mecanicos = MECANICOS.map((p) => ({ id: p.id, nombre: p.nombre }));
+  const mecanico = trabajadores.find((p) => p.id === o.mecanicoId) ?? persona(o.mecanicoId);
+  const personas = trabajadores.map((p) => ({ id: p.id, nombre: p.nombre }));
+  const mecanicos = trabajadores.filter((p) => p.rol === 'mecanico').map((p) => ({ id: p.id, nombre: p.nombre }));
   const diasTexto = cerrada ? `Entregado el ${fmtFecha(o.cierre ?? o.entrada)}` : etiquetaDias(diasEnTaller(o.entrada));
   const historial = [...o.historial].reverse();
 

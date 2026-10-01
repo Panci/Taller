@@ -1,7 +1,14 @@
 import { cookies } from 'next/headers';
 import type { Db } from './supabase/servidor';
 import type { Json } from './supabase/tipos-bd';
-import { HORARIO_DEFECTO, PERSONAS, TALLER, type HorarioTaller } from './constantes';
+import {
+  HORARIO_DEFECTO,
+  PERSONAS,
+  TALLER,
+  type HorarioTaller,
+  actualizarMemoriaTaller,
+  actualizarMemoriaTrabajadores,
+} from './constantes';
 import type { Persona } from './tipos';
 
 // Claves de la tabla 'ajustes' en Supabase
@@ -126,7 +133,7 @@ export async function leerDatosTaller(db?: Db | null): Promise<DatosTaller> {
 
       if (!error && data?.valor && typeof data.valor === 'object') {
         const v = data.valor as Record<string, unknown>;
-        return {
+        const res: DatosTaller = {
           nombre: String(v.nombre || DATOS_TALLER_DEFECTO.nombre).trim(),
           lema: String(v.lema || DATOS_TALLER_DEFECTO.lema).trim(),
           ciudad: String(v.ciudad || DATOS_TALLER_DEFECTO.ciudad).trim(),
@@ -137,6 +144,8 @@ export async function leerDatosTaller(db?: Db | null): Promise<DatosTaller> {
           web: String(v.web || DATOS_TALLER_DEFECTO.web).trim(),
           garantia: String(v.garantia || DATOS_TALLER_DEFECTO.garantia).trim(),
         };
+        actualizarMemoriaTaller(res);
+        return res;
       }
     } catch {
       // Fallback
@@ -149,10 +158,12 @@ export async function leerDatosTaller(db?: Db | null): Promise<DatosTaller> {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        return {
+        const res: DatosTaller = {
           ...DATOS_TALLER_DEFECTO,
           ...parsed,
         };
+        actualizarMemoriaTaller(res);
+        return res;
       }
     }
   } catch {
@@ -164,6 +175,7 @@ export async function leerDatosTaller(db?: Db | null): Promise<DatosTaller> {
 
 export async function guardarDatosTaller(db: Db, datos: DatosTaller): Promise<{ ok: boolean; enBd: boolean; error?: string }> {
   let enBd = false;
+  actualizarMemoriaTaller(datos);
   try {
     const { error } = await db.from('ajustes').upsert({
       clave: CLAVE_TALLER,
@@ -316,7 +328,9 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
     try {
       const { data, error } = await db.from('ajustes').select('valor').eq('clave', CLAVE_TRABAJADORES).maybeSingle();
       if (!error && Array.isArray(data?.valor)) {
-        return data.valor as unknown as Persona[];
+        const res = data.valor as unknown as Persona[];
+        actualizarMemoriaTrabajadores(res);
+        return res;
       }
     } catch {
       //
@@ -329,12 +343,16 @@ export async function leerTrabajadoresTaller(db?: Db | null): Promise<Persona[]>
     const raw = c.get(COOKIE_TRABAJADORES)?.value;
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        actualizarMemoriaTrabajadores(parsed);
+        return parsed;
+      }
     }
   } catch {
     //
   }
 
+  actualizarMemoriaTrabajadores(PERSONAS);
   return PERSONAS;
 }
 
@@ -355,13 +373,15 @@ export async function guardarTrabajadorTaller(db: Db, p: Persona): Promise<{ ok:
     //
   }
 
-  // Actualizar lista en ajustes
+  // Actualizar lista en ajustes y memoria
   try {
     const actuales = await leerTrabajadoresTaller(db);
     const idx = actuales.findIndex((x) => x.id === p.id);
     const nuevaLista = idx >= 0
       ? actuales.map((x) => (x.id === p.id ? p : x))
       : [...actuales, p];
+
+    actualizarMemoriaTrabajadores(nuevaLista);
 
     const { error } = await db.from('ajustes').upsert({
       clave: CLAVE_TRABAJADORES,

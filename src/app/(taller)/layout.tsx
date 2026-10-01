@@ -7,7 +7,7 @@ import { vistasDe } from '@/lib/permisos';
 import { pendientesDePersona } from '@/lib/datos';
 import { fmtCabecera } from '@/lib/fechas';
 import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
-import { leerDatosTaller } from '@/lib/ajustes';
+import { leerDatosTaller, leerTrabajadoresTaller } from '@/lib/ajustes';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +22,7 @@ export default async function LayoutTaller({ children }: { children: React.React
     yo.rol === 'mecanico' ? Promise.resolve(0) : pendientesDePersona(db),
     iaConfiguradaAsync(),
     leerDatosTaller(db),
+    leerTrabajadoresTaller(db),
   ]);
 
   return (

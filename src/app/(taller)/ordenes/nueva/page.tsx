@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { dbSesion, exigirVista } from '@/lib/sesion';
 import { leerCita, leerClientes, leerCoches, ordenesAbiertas } from '@/lib/datos';
 import { claveMatricula } from '@/lib/formato';
-import { MECANICOS } from '@/lib/constantes';
+import { leerTrabajadoresTaller } from '@/lib/ajustes';
 import { fmtDiaLargo, horaCorta } from '@/lib/fechas';
 import { FormNuevaOrden, type Prerrelleno } from '@/components/orden/nueva-orden';
 
@@ -12,7 +12,12 @@ export default async function PaginaNuevaOrden({ searchParams }: { searchParams:
   await exigirVista('tablero');
   const { coche: cocheId, cita: citaId } = await searchParams;
   const db = await dbSesion();
-  const [todos, coches, abiertas] = await Promise.all([leerClientes(db), leerCoches(db), ordenesAbiertas(db)]);
+  const [todos, coches, abiertas, trabajadores] = await Promise.all([
+    leerClientes(db),
+    leerCoches(db),
+    ordenesAbiertas(db),
+    leerTrabajadoresTaller(db),
+  ]);
   const ordenAbiertaDe = (cocheId: string) => abiertas.find((o) => o.cocheId === cocheId);
   const cochePorMatricula = (m: string) => coches.find((v) => claveMatricula(v.matricula) === claveMatricula(m));
 
@@ -54,7 +59,7 @@ export default async function PaginaNuevaOrden({ searchParams }: { searchParams:
       <FormNuevaOrden
         key={`${cocheId ?? ""}-${citaId ?? ""}`}
         clientes={clientes}
-        mecanicos={MECANICOS.map((m) => ({ id: m.id, nombre: m.nombreCompleto }))}
+        mecanicos={trabajadores.filter((m) => m.rol === 'mecanico').map((m) => ({ id: m.id, nombre: m.nombreCompleto }))}
         pre={pre}
       />
     </main>

@@ -4,7 +4,7 @@
 // y su rol antes de tocar nada; además, la base de datos vuelve a comprobarlo
 // con sus propias reglas (RLS) usando la sesión de esa persona.
 
-import { refresh } from 'next/cache';
+import { refresh, revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { EstadoId, EstadoPieza, InformeCliente, InformeInterno, Persona, PersonaId, Propuesta, Resultado } from '@/lib/tipos';
 import { type HorarioTaller, PERSONAS } from '@/lib/constantes';
@@ -283,6 +283,7 @@ export async function anularCitaAccion(id: string): Promise<Resultado> {
 export async function guardarDatosTallerAccion(datos: DatosTaller): Promise<Resultado> {
   return ejecutar(esDueno, async (_a, db) => {
     const r = await guardarDatosTaller(db, datos);
+    revalidatePath('/', 'layout');
     return {
       ok: true,
       mensaje: r.enBd
@@ -315,6 +316,7 @@ export async function probarClaveIAAccion(apiKey: string): Promise<Resultado> {
 export async function guardarTrabajadorAccion(p: Persona): Promise<Resultado> {
   return ejecutar(esDueno, async (_a, db) => {
     const r = await guardarTrabajadorTaller(db, p);
+    revalidatePath('/', 'layout');
     return {
       ok: true,
       mensaje: r.enBd

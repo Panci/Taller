@@ -1,5 +1,6 @@
 import { exigirVista } from '@/lib/sesion';
 import { ChatPublico } from '@/components/chat/chat-publico';
+import { leerDatosTaller } from '@/lib/ajustes';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +15,10 @@ const IDEAS = [
 // Solo el dueño: hace de cliente para ver cómo contesta el asistente.
 export default async function PaginaProbarAsistente() {
   await exigirVista('probar');
+  const taller = await leerDatosTaller();
   return (
     <main className="px-4 sm:px-7 pt-5 pb-10 flex flex-col lg:flex-row gap-6 items-start justify-center w-full">
-      <ChatPublico prueba />
+      <ChatPublico prueba taller={taller} />
       <section className="w-full lg:max-w-[380px] flex flex-col gap-4">
         <div>
           <h1 className="m-0 text-[26px] font-bold">Probar el asistente</h1>

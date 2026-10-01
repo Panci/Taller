@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MensajePublico, VistaChatPublico } from '@/lib/chat-publico';
+import type { DatosTaller } from '@/lib/ajustes';
 
 const CLAVE = 'talleres-ruiz-chat';
 const SUGERENCIAS = ['Pedir cita', '¿Cómo va mi coche?', 'Precios', 'Hablar con una persona'];
@@ -29,7 +30,7 @@ function guardarId(clave: string, id: string | null) {
  * asistente»: escribe en su propia ruta, guarda su chat aparte y cabe dentro
  * de la pantalla del taller.
  */
-export function ChatPublico({ prueba = false }: { prueba?: boolean }) {
+export function ChatPublico({ prueba = false, taller }: { prueba?: boolean; taller?: DatosTaller }) {
   const clave = prueba ? `${CLAVE}-prueba` : CLAVE;
   const [chat, setChat] = useState<VistaChatPublico | null>(null);
   const [borrador, setBorrador] = useState('');
@@ -139,16 +140,25 @@ export function ChatPublico({ prueba = false }: { prueba?: boolean }) {
   const mensajes = [...(chat?.mensajes ?? []), ...(pendiente ? [pendiente] : [])];
   const escribiendo = enviando && (chat?.modo ?? 'ia') === 'ia';
 
+  const nombre = taller?.nombre || 'Talleres Ruiz';
+  const iniciales =
+    nombre
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || 'TR';
+
   return (
     <div className={`${prueba
       ? 'w-full sm:w-[460px] h-[min(720px,calc(100dvh-150px))] min-h-[420px] rounded-2xl border border-borde'
       : 'w-full h-dvh sm:w-[460px] sm:h-[min(780px,calc(100dvh-48px))] sm:rounded-2xl sm:border sm:border-borde'
     } bg-fondo overflow-hidden sm:shadow-[0_12px_40px_rgba(28,25,23,.18)] shrink-0 flex flex-col`}>
       <div className="bg-rojo text-white px-[18px] pt-[max(14px,env(safe-area-inset-top))] pb-4 flex items-center gap-3 shrink-0">
-        <div className="w-[42px] h-[42px] bg-white rounded-md text-rojo font-bold text-base flex items-center justify-center">TR</div>
+        <div className="w-[42px] h-[42px] bg-white rounded-md text-rojo font-bold text-base flex items-center justify-center">{iniciales}</div>
         <div className="flex-1 min-w-0">
           <div className="text-[17px] font-bold">
-            Talleres Ruiz
+            {nombre}
             {prueba && <span className="ml-2 align-middle text-[11px] font-bold uppercase tracking-[.04em] bg-white/20 rounded px-1.5 py-px">Prueba</span>}
           </div>
           <div className="text-[13px]">{chat?.atiende ?? 'Asistente del taller · contesta al momento'}</div>
@@ -162,14 +172,14 @@ export function ChatPublico({ prueba = false }: { prueba?: boolean }) {
 
       <div ref={lista} className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         <div className="self-start max-w-[85%] bg-white border border-borde rounded-[14px] px-3.5 py-[11px] text-base leading-[1.45]">
-          Hola, soy el asistente de Talleres Ruiz. Te cuento cómo va tu coche (dime la matrícula y el código de la orden), te doy precios y te reservo cita. Si hace falta, te paso con Lucía, de recepción.
+          Hola, soy el asistente de {nombre}. Te cuento cómo va tu coche (dime la matrícula y el código de la orden), te doy precios y te reservo cita. Si hace falta, te paso con recepción.
         </div>
         {mensajes.map((m) => {
           const mio = m.de === 'cliente';
           return (
             <div key={m.id} className="flex flex-col gap-[3px]" style={{ alignItems: mio ? 'flex-end' : 'flex-start' }}>
               <span className="text-xs text-t2">
-                {mio ? `Tú · ${m.hora}` : m.de === 'ia' ? `Asistente · ${m.hora}` : `${m.autor ?? 'Taller'} · Talleres Ruiz · ${m.hora}`}
+                {mio ? `Tú · ${m.hora}` : m.de === 'ia' ? `Asistente · ${m.hora}` : `${m.autor ?? 'Taller'} · ${nombre} · ${m.hora}`}
               </span>
               <div
                 className="max-w-[85%] rounded-[14px] px-3.5 py-[11px] text-base leading-[1.45] whitespace-pre-wrap"
