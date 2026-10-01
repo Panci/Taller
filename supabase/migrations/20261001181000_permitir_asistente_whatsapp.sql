@@ -1,11 +1,24 @@
--- Permitir al rol asistente leer ajustes (horarios, datos taller, ia, whatsapp)
+-- 1. Crear tabla de ajustes si aún no existe en la base de datos
+create table if not exists public.ajustes (
+  clave text primary key check (length(clave) between 1 and 60),
+  valor jsonb not null default '{}'::jsonb,
+  actualizado timestamptz not null default now()
+);
+
+grant select, insert, update on public.ajustes to authenticated;
+alter table public.ajustes enable row level security;
+
+-- 2. Políticas RLS de la tabla ajustes
 drop policy if exists "ajustes: taller lee y cambia" on public.ajustes;
+drop policy if exists "ajustes: todos con rol leen" on public.ajustes;
 create policy "ajustes: todos con rol leen" on public.ajustes for select to authenticated
   using ((select privado.rol()) <> '');
+
+drop policy if exists "ajustes: taller cambia" on public.ajustes;
 create policy "ajustes: taller cambia" on public.ajustes for all to authenticated
   using ((select privado.es_taller())) with check ((select privado.es_taller()));
 
--- Permitir al rol asistente gestionar conversaciones de WhatsApp
+-- 3. Políticas RLS para conversaciones (Web y WhatsApp)
 drop policy if exists "conversaciones: taller y asistente (web) ven" on public.conversaciones;
 create policy "conversaciones: taller y asistente (web) ven" on public.conversaciones for select to authenticated
   using ((select privado.es_taller()) or ((select privado.rol()) = 'asistente' and canal in ('Web', 'WhatsApp')));
@@ -19,7 +32,7 @@ create policy "conversaciones: taller y asistente (web) cambian" on public.conve
   using ((select privado.es_taller()) or ((select privado.rol()) = 'asistente' and canal in ('Web', 'WhatsApp')))
   with check ((select privado.es_taller()) or ((select privado.rol()) = 'asistente' and canal in ('Web', 'WhatsApp')));
 
--- Asignar nombre por defecto para conversaciones de WhatsApp si no viene especificado
+-- 4. Asignar nombre por defecto para conversaciones de WhatsApp
 create or replace function privado.nueva_conversacion() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
