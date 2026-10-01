@@ -4,7 +4,7 @@
 import type { Orden, Persona, VistaId } from './tipos';
 
 const VISTAS: Record<Persona['rol'], VistaId[]> = {
-  dueno: ['tablero', 'conversaciones', 'clientes', 'citas', 'tarifa', 'probar'],
+  dueno: ['tablero', 'conversaciones', 'clientes', 'citas', 'tarifa', 'probar', 'configuracion'],
   recepcion: ['tablero', 'conversaciones', 'clientes', 'citas'],
   mecanico: [],
 };

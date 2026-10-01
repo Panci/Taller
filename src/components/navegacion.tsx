@@ -11,6 +11,7 @@ const SECCIONES: { id: VistaId; ruta: string; nombre: string }[] = [
   { id: 'citas', ruta: '/citas', nombre: 'Citas' },
   { id: 'tarifa', ruta: '/tarifa', nombre: 'Tarifa' },
   { id: 'probar', ruta: '/probar-asistente', nombre: 'Probar asistente' },
+  { id: 'configuracion', ruta: '/configuracion', nombre: 'Configuración' },
 ];
 
 export function Navegacion({ vistas, pendientes, fecha, iaLista }: {

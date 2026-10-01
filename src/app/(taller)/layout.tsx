@@ -6,7 +6,8 @@ import { dbSesion, personaObligatoria } from '@/lib/sesion';
 import { vistasDe } from '@/lib/permisos';
 import { pendientesDePersona } from '@/lib/datos';
 import { fmtCabecera } from '@/lib/fechas';
-import { iaConfigurada } from '@/lib/ia/openrouter';
+import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
+import { leerDatosTaller } from '@/lib/ajustes';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,12 +17,18 @@ export const metadata: Metadata = {
 
 export default async function LayoutTaller({ children }: { children: React.ReactNode }) {
   const yo = await personaObligatoria();
-  const pendientes = yo.rol === 'mecanico' ? 0 : await pendientesDePersona(await dbSesion());
+  const db = await dbSesion();
+  const [pendientes, iaLista, datosTaller] = await Promise.all([
+    yo.rol === 'mecanico' ? Promise.resolve(0) : pendientesDePersona(db),
+    iaConfiguradaAsync(),
+    leerDatosTaller(db),
+  ]);
+
   return (
     <div className="min-h-dvh flex flex-col has-[.pantalla-completa]:h-dvh">
-      <Cabecera persona={yo} />
+      <Cabecera persona={yo} taller={datosTaller} />
       {yo.rol !== 'mecanico' && (
-        <Navegacion vistas={vistasDe(yo)} pendientes={pendientes} fecha={fmtCabecera()} iaLista={iaConfigurada()} />
+        <Navegacion vistas={vistasDe(yo)} pendientes={pendientes} fecha={fmtCabecera()} iaLista={iaLista} />
       )}
       {children}
       <AutoRefresco />

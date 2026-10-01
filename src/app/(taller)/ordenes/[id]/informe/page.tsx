@@ -2,11 +2,12 @@ import { notFound } from 'next/navigation';
 import { dbSesion, exigirVista } from '@/lib/sesion';
 import { datosDeOrden, leerOrden, leerTarifa } from '@/lib/datos';
 import { servicioDe, totalOrden, trabajosSinPrecio } from '@/lib/calculos';
-import { ESTADOS, ESTADOS_PIEZA, nombrePersona, persona, TALLER } from '@/lib/constantes';
+import { ESTADOS, ESTADOS_PIEZA, nombrePersona, persona } from '@/lib/constantes';
 import { diasEnTaller, etiquetaDias, fmtFecha, fmtFechaNumerica, fmtSello, hoy } from '@/lib/fechas';
 import { fkm } from '@/lib/formato';
 import { firmaInforme } from '@/lib/ia/informe';
-import { iaConfigurada } from '@/lib/ia/openrouter';
+import { leerDatosTaller } from '@/lib/ajustes';
+import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
 import { VistaInforme, type DatosInforme } from '@/components/informe/vista';
 
 export const dynamic = 'force-dynamic';
@@ -21,13 +22,18 @@ export default async function PaginaInforme({ params, searchParams }: {
   const db = await dbSesion();
   const o = await leerOrden(db, decodeURIComponent(id));
   if (!o) notFound();
-  const [{ coche, cliente }, tarifa] = await Promise.all([datosDeOrden(db, o), leerTarifa(db)]);
+  const [{ coche, cliente }, tarifa, datosTaller, iaLista] = await Promise.all([
+    datosDeOrden(db, o),
+    leerTarifa(db),
+    leerDatosTaller(db),
+    iaConfiguradaAsync(),
+  ]);
   const cerrada = o.estado === 'entregado';
 
   const datos: DatosInforme = {
     ordenId: o.id,
     fecha: fmtFechaNumerica(cerrada ? (o.cierre ?? hoy()) : hoy()),
-    taller: TALLER,
+    taller: datosTaller,
     cliente: { nombre: cliente.nombre, telefono: cliente.telefono, email: cliente.email },
     vehiculo: { modelo: coche.modelo, matricula: coche.matricula, anio: coche.anio, km: fkm(o.km) },
     motivo: o.motivo,
@@ -53,5 +59,5 @@ export default async function PaginaInforme({ params, searchParams }: {
     firmaActual: firmaInforme(o),
   };
 
-  return <VistaInforme key={`${o.id}-${version}`} version={version} datos={datos} iaLista={iaConfigurada()} />;
+  return <VistaInforme key={`${o.id}-${version}`} version={version} datos={datos} iaLista={iaLista} />;
 }

@@ -2,9 +2,9 @@
 
 export type EstadoId = 'recibido' | 'diagnostico' | 'pieza' | 'reparacion' | 'listo';
 export type EstadoOrden = EstadoId | 'entregado';
-export type PersonaId = 'paco' | 'lucia' | 'javi' | 'ruben' | 'marta';
+export type PersonaId = 'paco' | 'lucia' | 'javi' | 'ruben' | 'marta' | (string & {});
 export type Rol = 'dueno' | 'recepcion' | 'mecanico';
-export type VistaId = 'tablero' | 'conversaciones' | 'clientes' | 'citas' | 'tarifa' | 'probar';
+export type VistaId = 'tablero' | 'conversaciones' | 'clientes' | 'citas' | 'tarifa' | 'probar' | 'configuracion';
 export type OrigenIA = 'voz' | 'texto';
 
 export interface Persona {

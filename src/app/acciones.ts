@@ -8,7 +8,15 @@ import { refresh } from 'next/cache';
 import { z } from 'zod';
 import type { EstadoId, EstadoPieza, InformeCliente, InformeInterno, Persona, PersonaId, Propuesta, Resultado } from '@/lib/tipos';
 import { type HorarioTaller, PERSONAS } from '@/lib/constantes';
-import { guardarHorarioTaller } from '@/lib/ajustes';
+import {
+  guardarHorarioTaller,
+  guardarDatosTaller,
+  guardarConfiguracionIA,
+  guardarTrabajadorTaller,
+  type DatosTaller,
+  type ConfiguracionIA,
+} from '@/lib/ajustes';
+import { probarConexionOpenRouter } from '@/lib/ia/openrouter';
 import { dbSesion, personaActual } from '@/lib/sesion';
 import { puedeEditarTarifa, puedeTocarOrden } from '@/lib/permisos';
 import { cochePorMatricula, leerOrden, leerTarifa, ordenAbiertaDe } from '@/lib/datos';
@@ -267,6 +275,64 @@ export async function anularCitaAccion(id: string): Promise<Resultado> {
   return ejecutar(esEscritorio, async (_a, db) => {
     await op.anularCita(db, id);
     return 'Cita anulada. El hueco queda libre.';
+  });
+}
+
+// ——— Configuración general (solo el dueño) ———
+
+export async function guardarDatosTallerAccion(datos: DatosTaller): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const r = await guardarDatosTaller(db, datos);
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? 'Datos del taller guardados en la base de datos.'
+        : 'Datos del taller guardados en tu navegador.',
+    };
+  });
+}
+
+export async function guardarConfiguracionIAAccion(config: ConfiguracionIA): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const r = await guardarConfiguracionIA(db, config);
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? 'Configuración de IA guardada en la base de datos.'
+        : 'Configuración de IA guardada en tu navegador.',
+    };
+  });
+}
+
+export async function probarClaveIAAccion(apiKey: string): Promise<Resultado> {
+  return ejecutar(esDueno, async () => {
+    const r = await probarConexionOpenRouter(apiKey);
+    if (!r.ok) return { ok: false, error: r.mensaje };
+    return { ok: true, mensaje: r.mensaje };
+  });
+}
+
+export async function guardarTrabajadorAccion(p: Persona): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    const r = await guardarTrabajadorTaller(db, p);
+    return {
+      ok: true,
+      mensaje: r.enBd
+        ? `Trabajador ${p.nombre} actualizado en la base de datos.`
+        : `Trabajador ${p.nombre} actualizado en tu navegador.`,
+    };
+  });
+}
+
+export async function cambiarClaveTrabajadorAccion(personaId: string, clave: string): Promise<Resultado> {
+  return ejecutar(esDueno, async (_a, db) => {
+    if (!clave || clave.length < 10) throw new op.ErrorNegocio('La contraseña debe tener al menos 10 caracteres.');
+    const { error } = await db.rpc('poner_clave', { p_persona: personaId, p_clave: clave });
+    if (error) {
+      if (error.code === '22023' || error.code === '42501') throw new op.ErrorNegocio(error.message);
+      throw new op.ErrorNegocio('No se ha podido cambiar la contraseña en Supabase.');
+    }
+    return { ok: true, mensaje: 'Contraseña actualizada correctamente.' };
   });
 }
 

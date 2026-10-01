@@ -1,0 +1,36 @@
+import { dbSesion, exigirVista } from '@/lib/sesion';
+import { leerDatosTaller, leerConfiguracionIA, leerTrabajadoresTaller } from '@/lib/ajustes';
+import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
+import { PanelConfiguracion } from '@/components/configuracion/panel';
+
+export const dynamic = 'force-dynamic';
+
+export default async function PaginaConfiguracion() {
+  await exigirVista('configuracion');
+  const db = await dbSesion();
+
+  const [taller, configIA, trabajadores, iaActiva] = await Promise.all([
+    leerDatosTaller(db),
+    leerConfiguracionIA(db),
+    leerTrabajadoresTaller(db),
+    iaConfiguradaAsync(),
+  ]);
+
+  return (
+    <main className="px-4 sm:px-7 pt-6 pb-12 max-w-[1040px] w-full mx-auto flex flex-col gap-6">
+      <div>
+        <h1 className="m-0 text-[26px] font-bold">Configuración</h1>
+        <div className="text-t2 text-sm mt-1">
+          Ajustes generales del taller, gestión del equipo de trabajadores y conexión con la inteligencia artificial.
+        </div>
+      </div>
+
+      <PanelConfiguracion
+        datosTallerInicial={taller}
+        configIAInicial={configIA}
+        trabajadoresInicial={trabajadores}
+        iaActivaInicial={iaActiva}
+      />
+    </main>
+  );
+}

@@ -1,8 +1,5 @@
-// Cliente mínimo de OpenRouter. Todas las respuestas se piden en JSON; si
-// llegan mal (no es JSON o no cumple las reglas), se reintenta una vez.
-// La clave solo se lee aquí, en el servidor, y nunca se devuelve ni se muestra.
-
 import type { z } from 'zod';
+import { leerConfiguracionIA } from '../ajustes';
 
 const URL_BASE = () => (process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
 
@@ -12,6 +9,16 @@ export const MODELO_POR_DEFECTO = 'google/gemini-3-flash-preview';
 export const modeloTexto = () => process.env.OPENROUTER_MODEL?.trim() || MODELO_POR_DEFECTO;
 export const modeloAudio = () => process.env.OPENROUTER_AUDIO_MODEL?.trim() || modeloTexto();
 export const iaConfigurada = () => Boolean(process.env.OPENROUTER_API_KEY?.trim());
+
+export async function iaConfiguradaAsync(): Promise<boolean> {
+  if (process.env.OPENROUTER_API_KEY?.trim()) return true;
+  try {
+    const cfg = await leerConfiguracionIA();
+    return Boolean(cfg.apiKey?.trim());
+  } catch {
+    return false;
+  }
+}
 
 export type MotivoErrorIA = 'sin_clave' | 'clave' | 'saldo' | 'limite' | 'red' | 'respuesta';
 
@@ -49,8 +56,21 @@ export interface PeticionJSON<T> {
 let nivelFormato = 0;
 
 export async function pedirJSON<T>(p: PeticionJSON<T>): Promise<T> {
-  if (!iaConfigurada()) {
-    throw new ErrorIA('La IA no está configurada: falta OPENROUTER_API_KEY en .env.local.', 'sin_clave');
+  let clave = process.env.OPENROUTER_API_KEY?.trim() || '';
+  let modeloConfigurado = '';
+  try {
+    const cfg = await leerConfiguracionIA();
+    if (cfg.apiKey?.trim()) clave = cfg.apiKey.trim();
+    if (cfg.modeloTexto?.trim()) modeloConfigurado = cfg.modeloTexto.trim();
+  } catch {
+    // Fallback
+  }
+
+  if (!clave) {
+    throw new ErrorIA('La IA no está configurada: introduce la clave de OpenRouter en Configuración o en .env.local.', 'sin_clave');
+  }
+  if (!p.modelo && modeloConfigurado) {
+    p.modelo = modeloConfigurado;
   }
   let mensajes = p.mensajes;
   let ultimoError = '';
@@ -86,10 +106,20 @@ export async function pedirJSON<T>(p: PeticionJSON<T>): Promise<T> {
 }
 
 async function completar<T>(p: PeticionJSON<T>, mensajes: MensajeIA[]): Promise<string> {
+  let clave = process.env.OPENROUTER_API_KEY?.trim() || '';
+  let modeloConfigurado = '';
+  try {
+    const cfg = await leerConfiguracionIA();
+    if (cfg.apiKey?.trim()) clave = cfg.apiKey.trim();
+    if (cfg.modeloTexto?.trim()) modeloConfigurado = cfg.modeloTexto.trim();
+  } catch {
+    //
+  }
+
   for (;;) {
     const nivel = nivelFormato;
     const cuerpo: Record<string, unknown> = {
-      model: p.modelo ?? modeloTexto(),
+      model: p.modelo ?? (modeloConfigurado || modeloTexto()),
       messages: nivel === 0 ? mensajes : conEsquema(mensajes, p.esquema),
       max_tokens: p.maxTokens ?? 4000,
     };
@@ -108,9 +138,9 @@ async function completar<T>(p: PeticionJSON<T>, mensajes: MensajeIA[]): Promise<
       r = await fetch(`${URL_BASE()}/chat/completions`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY?.trim()}`,
+          Authorization: `Bearer ${clave}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:5678',
+          'HTTP-Referer': 'https://taller-blond.vercel.app',
           'X-Title': 'Talleres Ruiz',
         },
         body: JSON.stringify(cuerpo),
@@ -121,7 +151,7 @@ async function completar<T>(p: PeticionJSON<T>, mensajes: MensajeIA[]): Promise<
       throw new ErrorIA('No se ha podido hablar con OpenRouter (sin conexión o ha tardado demasiado).', 'red');
     }
 
-    if (r.status === 401 || r.status === 403) throw new ErrorIA('OpenRouter no acepta la clave. Revisa OPENROUTER_API_KEY en .env.local.', 'clave');
+    if (r.status === 401 || r.status === 403) throw new ErrorIA('OpenRouter no acepta la clave. Revisa la clave en Configuración.', 'clave');
     if (r.status === 402) throw new ErrorIA('La cuenta de OpenRouter se ha quedado sin saldo.', 'saldo');
     if (r.status === 429) throw new ErrorIA('OpenRouter pide esperar un momento (demasiadas peticiones).', 'limite');
 
@@ -194,4 +224,34 @@ export function conZod<T>(esquema: z.ZodType<T>, extra?: (valor: T) => string | 
 export function mensajeDeError(e: unknown): string {
   if (e instanceof ErrorIA) return e.message;
   return 'La IA ha fallado. Puedes seguir a mano.';
+}
+
+export async function probarConexionOpenRouter(apiKey: string): Promise<{ ok: boolean; mensaje: string }> {
+  const clave = apiKey.trim();
+  if (!clave) return { ok: false, mensaje: 'Introduce la clave de API de OpenRouter.' };
+
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      headers: {
+        Authorization: `Bearer ${clave}`,
+      },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (r.status === 401 || r.status === 403) {
+      return { ok: false, mensaje: 'Clave no válida. OpenRouter ha rechazado la autenticación.' };
+    }
+
+    if (!r.ok) {
+      return { ok: false, mensaje: `OpenRouter respondió con error (código HTTP ${r.status}).` };
+    }
+
+    const data = (await r.json().catch(() => null)) as { data?: { label?: string; limit?: number | null; usage?: number } } | null;
+    const label = data?.data?.label ? ` («${data.data.label}»)` : '';
+    const limite = data?.data?.limit !== null && data?.data?.limit !== undefined ? ` (Límite: $${data.data.limit})` : '';
+    return { ok: true, mensaje: `¡Conexión exitosa! Clave de OpenRouter válida y lista para usar${label}${limite}.` };
+  } catch (e) {
+    return { ok: false, mensaje: `No se pudo contactar con OpenRouter: ${e instanceof Error ? e.message : 'tiempo de espera agotado'}.` };
+  }
 }
