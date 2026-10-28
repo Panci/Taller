@@ -5,6 +5,7 @@
 // → la IA propone cambios → el mecánico confirma, corrige o descarta.
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { confirmarPropuestaAccion } from '@/app/acciones';
 import { errorAlGuardar, useAvisos } from '@/components/avisos';
@@ -39,6 +40,7 @@ const horaAhora = () => new Date().toLocaleTimeString('es-ES', { hour: '2-digit'
 export function FichaMovil({ yo, orden, tarifa, iaLista }: {
   yo: { nombre: string }; orden: DatosFichaMovil; tarifa: ServicioTarifa[]; iaLista: boolean;
 }) {
+  const router = useRouter();
   const avisar = useAvisos();
   const [fase, setFase] = useState<Fase>({ tipo: 'ficha' });
   const [texto, setTexto] = useState('');
@@ -219,6 +221,7 @@ export function FichaMovil({ yo, orden, tarifa, iaLista }: {
         if (r.ok) {
           avisar(r.mensaje ?? 'Ficha guardada.');
           setFase({ tipo: 'ficha' });
+          router.refresh();
         } else {
           avisar(r.error);
         }

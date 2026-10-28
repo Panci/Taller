@@ -1,14 +1,18 @@
-// Base de datos en memoria para Modo Demo Instantáneo (sin necesitar contraseñas de Supabase).
-// Permite enseñar todas las pantallas (Tablero, Conversaciones, Citas, Clientes, Tarifa, Móvil Mecánico)
-// cambiando de perfil en 1 clic.
+// Base de datos para Modo Demo Instantáneo (sin necesitar contraseñas de Supabase).
+// Además de en memoria, guarda las órdenes modificadas en una cookie ('tr_demo_ordenes')
+// para que en Vercel (serverless) los cambios que el mecánico dicta con IA se mantengan
+// siempre sincronizados al cambiar entre la vista móvil, el tablero y las fichas.
 
 import 'server-only';
 import { randomUUID } from 'node:crypto';
+import { cookies } from 'next/headers';
 import { crearDatosEjemplo } from '../datos-ejemplo';
 import { deCita, deCliente, deCoche, deOrden, deServicio } from '../filas';
 import type { Db } from './servidor';
 
-interface EstadoMemoria {
+const COOKIE_DEMO_DIFF = 'tr_demo_ordenes';
+
+export interface EstadoMemoria {
   clientes: Record<string, unknown>[];
   coches: Record<string, unknown>[];
   tarifa: Record<string, unknown>[];
@@ -80,9 +84,57 @@ function inicializarMemoria(): EstadoMemoria {
   };
 }
 
-export function estadoDemo(): EstadoMemoria {
+async function estadoDemo(): Promise<EstadoMemoria> {
   globalThis.__trMemoriaDemo ??= inicializarMemoria();
-  return globalThis.__trMemoriaDemo;
+  const mem = globalThis.__trMemoriaDemo;
+
+  // Aplicar parches de órdenes guardados en la cookie de sesión (para entornos serverless como Vercel)
+  try {
+    const c = await cookies();
+    const raw = c.get(COOKIE_DEMO_DIFF)?.value;
+    if (raw) {
+      const parches = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+      for (const [id, cambios] of Object.entries(parches)) {
+        const idx = mem.ordenes.findIndex((o) => o.id === id);
+        if (idx >= 0) {
+          mem.ordenes[idx] = { ...mem.ordenes[idx], ...cambios };
+        }
+      }
+    }
+  } catch {
+    //
+  }
+
+  return mem;
+}
+
+async function guardarParcheOrdenCookie(ordenActualizada: Record<string, unknown>): Promise<void> {
+  try {
+    const c = await cookies();
+    const raw = c.get(COOKIE_DEMO_DIFF)?.value;
+    const parches: Record<string, Record<string, unknown>> = raw ? JSON.parse(raw) : {};
+    const id = String(ordenActualizada.id);
+    // Guardamos solo las órdenes abiertas modificadas para no superar el límite de 4KB de cookie
+    parches[id] = {
+      estado: ordenActualizada.estado,
+      km: ordenActualizada.km,
+      mecanico_id: ordenActualizada.mecanico_id,
+      motivo: ordenActualizada.motivo,
+      trabajos: ordenActualizada.trabajos,
+      piezas: ordenActualizada.piezas,
+      observaciones: ordenActualizada.observaciones,
+      ultima_ia: ordenActualizada.ultima_ia,
+      version: ordenActualizada.version,
+    };
+    c.set(COOKIE_DEMO_DIFF, JSON.stringify(parches), {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60,
+    });
+  } catch {
+    //
+  }
 }
 
 type Filtro = (fila: Record<string, unknown>) => boolean;
@@ -182,8 +234,8 @@ class ConstructorConsulta {
     return this;
   }
 
-  private ejecutar(): { data: unknown; error: null; count?: number } {
-    const mem = estadoDemo();
+  private async ejecutar(): Promise<{ data: unknown; error: null; count?: number }> {
+    const mem = await estadoDemo();
     const lista = (mem[this.tabla] as Record<string, unknown>[]) ?? [];
     const cumple = (f: Record<string, unknown>) => this.filtros.every((fn) => fn(f));
 
@@ -242,6 +294,7 @@ class ConstructorConsulta {
         const actualizado = { ...lista[i], ...cambios };
         if (this.tabla === 'ordenes') {
           actualizado.version = Number(lista[i].version ?? 1) + 1;
+          await guardarParcheOrdenCookie(actualizado);
         }
         if (this.tabla === 'coches' && cambios.matricula) {
           actualizado.matricula_clave = claveMatricula(String(cambios.matricula));
@@ -265,7 +318,6 @@ class ConstructorConsulta {
       return { data: null, error: null, count: res.length };
     }
 
-    // Join especial para bandeja de conversaciones: mensajes(id, de, texto, cuando, autor)
     if (this.tabla === 'conversaciones' && this.columnas.includes('mensajes(')) {
       res = res.map((c) => {
         const msgs = mem.mensajes
@@ -292,10 +344,7 @@ class ConstructorConsulta {
   }
 
   private formatearSalida(filas: Record<string, unknown>[]): { data: unknown; error: null; count?: number } {
-    if (this.modoSingle === 'single') {
-      return { data: filas[0] ?? null, error: null };
-    }
-    if (this.modoSingle === 'maybeSingle') {
+    if (this.modoSingle === 'single' || this.modoSingle === 'maybeSingle') {
       return { data: filas[0] ?? null, error: null };
     }
     return { data: filas, error: null, count: filas.length };
@@ -305,15 +354,15 @@ class ConstructorConsulta {
     onfulfilled?: ((value: { data: unknown; error: null; count?: number }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(this.ejecutar()).then(onfulfilled, onrejected);
+    return this.ejecutar().then(onfulfilled, onrejected);
   }
 }
 
 export function crearClienteDemo(personaId = 'paco', rol = 'dueno'): Db {
-  const mem = estadoDemo();
   const mock = {
     from: (tabla: string) => new ConstructorConsulta(tabla),
     rpc: async (fn: string, args: Record<string, unknown> = {}) => {
+      const mem = await estadoDemo();
       if (fn === 'huecos_ocupados') {
         const desde = String(args.p_desde ?? '');
         const hasta = String(args.p_hasta ?? '');
