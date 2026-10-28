@@ -30,6 +30,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Fuera: archivos estáticos y el chat público (no usa sesión).
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|chat|api/chat).*)'],
+  // Fuera: archivos estáticos, la presentación comercial, auto-login demo y el chat público (no usan sesión).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|presentacion|api/demo|chat|api/chat).*)'],
 };

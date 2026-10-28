@@ -2,9 +2,9 @@
 
 // Entrar, salir y cambiar contraseñas (Supabase Auth).
 
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { dbSesion, personaActual, usuarioDe } from '@/lib/sesion';
+import { COOKIE_DEMO, dbSesion, personaActual, usuarioDe } from '@/lib/sesion';
 import { inicioDe } from '@/lib/permisos';
 import { PERSONAS } from '@/lib/constantes';
 import { apuntar, consumir, ipDe, olvidar, quedan } from '@/lib/limites';
@@ -74,9 +74,37 @@ export async function iniciarSesion(_previo: EstadoEntrar, datos: FormData): Pro
 }
 
 export async function cerrarSesion(): Promise<void> {
-  const db = await dbSesion();
-  await db.auth.signOut({ scope: 'local' });
+  try {
+    const c = await cookies();
+    c.delete(COOKIE_DEMO);
+  } catch {
+    //
+  }
+  if (supabaseConfigurado()) {
+    const db = await dbSesion();
+    await db.auth.signOut({ scope: 'local' });
+  }
   redirect('/entrar');
+}
+
+/** Acceso rápido e infalible en 1 clic para demos en vivo (sin necesitar contraseñas de Supabase). */
+export async function entrarDemo(datos: FormData): Promise<void> {
+  const usuario = String(datos.get('usuario') ?? 'paco').trim().toLowerCase();
+  const destino = String(datos.get('destino') ?? '').trim();
+  const p = PERSONAS.find((x) => x.id === usuario) ?? PERSONAS[0];
+
+  const c = await cookies();
+  c.set(COOKIE_DEMO, p.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 24 * 60 * 60,
+  });
+
+  if (destino && destino.startsWith('/')) {
+    redirect(destino);
+  }
+  redirect(inicioDe(p));
 }
 
 // ——— Contraseñas ———

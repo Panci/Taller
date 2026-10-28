@@ -4,14 +4,31 @@
 
 import 'server-only';
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { PERSONAS } from './constantes';
 import { leerTrabajadoresTaller } from './ajustes';
 import { inicioDe, puedeVer } from './permisos';
 import { clienteSesion, supabaseConfigurado, type Db } from './supabase/servidor';
+import { crearClienteDemo } from './supabase/demo';
 import type { Persona, VistaId } from './tipos';
 
+export const COOKIE_DEMO = 'tr_demo_persona';
+
+async function personaDemo(): Promise<Persona | null> {
+  try {
+    const c = await cookies();
+    const id = c.get(COOKIE_DEMO)?.value;
+    if (!id) return null;
+    return PERSONAS.find((p) => p.id === id) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export const personaActual = cache(async (): Promise<Persona | null> => {
+  const demo = await personaDemo();
+  if (demo) return demo;
   if (!supabaseConfigurado()) return null;
   const db = await clienteSesion();
   const { data, error } = await db.auth.getClaims();
@@ -26,8 +43,12 @@ export const personaActual = cache(async (): Promise<Persona | null> => {
   return { ...p, rol: rolVerificado };
 });
 
-/** Cliente de Supabase con la sesión de quien ha entrado. */
-export const dbSesion = (): Promise<Db> => clienteSesion();
+/** Cliente de Supabase con la sesión de quien ha entrado (o base de datos Demo instantánea). */
+export const dbSesion = async (): Promise<Db> => {
+  const demo = await personaDemo();
+  if (demo) return crearClienteDemo(demo.id, demo.rol);
+  return clienteSesion();
+};
 
 const sinAcentos = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 

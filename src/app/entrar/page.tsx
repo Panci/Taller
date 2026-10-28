@@ -57,10 +57,17 @@ export default async function PaginaEntrar() {
           </div>
         )}
 
-        <p className="m-0 text-sm text-t2 text-center">
-          ¿Eres cliente?{' '}
-          <Link href="/chat" className="text-rojo font-semibold hover:underline">Pregúntanos por tu coche o pide cita</Link>
-        </p>
+        <div className="flex flex-col gap-2 text-sm text-t2 text-center">
+          <p className="m-0">
+            ¿Eres cliente?{' '}
+            <Link href="/chat" className="text-rojo font-semibold hover:underline">Pregúntanos por tu coche o pide cita</Link>
+          </p>
+          <p className="m-0">
+            <Link href="/presentacion" className="text-t3 font-semibold hover:text-tinta hover:underline">
+              Ver presentación comercial (AI Partner) →
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );

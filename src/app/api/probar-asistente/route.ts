@@ -2,6 +2,7 @@
 // cliente. Va por el mismo camino que el chat de la web (cuenta del asistente,
 // mismas reglas y misma IA), pero el chat queda marcado como prueba.
 
+import { cookies } from 'next/headers';
 import { cabeceraConversacion } from '@/lib/datos';
 import { abrirChatDePrueba, mensajeDelCliente } from '@/lib/operaciones';
 import { contestarAlCliente } from '@/lib/chat-servidor';
@@ -33,7 +34,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const db = await clienteAsistente();
+    const sesion = await dbSesion();
+    const esDemo = await cookies().then((c) => Boolean(c.get('tr_demo_persona')?.value)).catch(() => false);
+    const db = esDemo ? sesion : await clienteAsistente();
     // Solo se sigue un chat si es de prueba; si no, se abre uno nuevo.
     const existente = pedido ? await cabeceraConversacion(db, pedido) : undefined;
     let id = existente?.prueba ? existente.id : null;
@@ -41,7 +44,7 @@ export async function POST(req: Request) {
       if (!consumir(`probar-nuevo:${yo.id}`, 40, 60 * MINUTO)) {
         return Response.json({ error: 'Has abierto muchos chats de prueba en la última hora. Sigue con el que tienes.' }, { status: 429 });
       }
-      id = await abrirChatDePrueba(db, await dbSesion());
+      id = await abrirChatDePrueba(db, sesion);
     }
     await mensajeDelCliente(db, id, texto);
     return Response.json(await contestarAlCliente(db, id));
