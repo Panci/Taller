@@ -54,6 +54,7 @@ export interface Trabajo {
   hechoPor: PersonaId;
   cuando: string;
   ia?: OrigenIA;
+  manoObra?: { horas: number; tarifa: number; segundosRegistrados: number; revisionTiempos: string; aprobadoPor: string; aprobadoEn: string };
 }
 
 export type EstadoPieza = 'pendiente' | 'pedida' | 'recibida' | 'stock';

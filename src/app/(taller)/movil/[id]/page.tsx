@@ -7,6 +7,8 @@ import { fkm } from '@/lib/formato';
 import { vistaObservacion, vistaPieza, vistaTrabajo } from '@/lib/vistas';
 import { iaConfigurada } from '@/lib/ia/openrouter';
 import { FichaMovil } from '@/components/movil/ficha-movil';
+import { leerTiempos } from '@/lib/tiempos';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,11 +20,14 @@ export default async function PaginaFichaMovil({ params }: { params: Promise<{ i
   // Cada mecánico solo ve sus coches (la base de datos tampoco le deja ver otros).
   if (!o || o.mecanicoId !== yo.id || o.estado === 'entregado') redirect('/movil');
   const [{ coche, cliente }, tarifa] = await Promise.all([datosDeOrden(db, o), leerTarifa(db)]);
+  const tiempos = await leerTiempos(db, o.id).then((tramos) => ({ tramos, disponible: true })).catch(() => ({ tramos: [], disponible: false }));
 
   return (
     <FichaMovil
       key={o.id}
-      yo={{ nombre: yo.nombre }}
+      yo={{ nombre: yo.nombre, id: yo.id }}
+      tiempos={tiempos}
+      demo={Boolean((await cookies()).get('tr_demo_persona')?.value)}
       tarifa={tarifa}
       iaLista={iaConfigurada()}
       orden={{

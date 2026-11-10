@@ -14,6 +14,12 @@ import { Piezas } from '@/components/orden/piezas';
 import { Observaciones } from '@/components/orden/observaciones';
 import { CerrarOrden, DatosOrden, Motivo, ReabrirOrden, SelectorEstado } from '@/components/orden/ficha';
 import type { EstadoId } from '@/lib/tipos';
+import { leerTiempos } from '@/lib/tiempos';
+import { TiempoTrabajo } from '@/components/tiempo-trabajo';
+import { ManoObra } from '@/components/orden/mano-obra';
+import { revisionTiempos } from '@/lib/duracion';
+import { cookies } from 'next/headers';
+import { FotosOrden } from '@/components/fotos-orden';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +35,7 @@ export default async function PaginaOrden({ params }: { params: Promise<{ id: st
     leerTrabajadoresTaller(db),
   ]);
   const conversacion = await conversacionDe(db, cliente.id);
+  const tiempos = await leerTiempos(db, o.id).then((tramos) => ({ tramos, disponible: true })).catch(() => ({ tramos: [], disponible: false }));
   const cerrada = o.estado === 'entregado';
   const sinPrecio = trabajosSinPrecio(o);
   const mecanico = trabajadores.find((p) => p.id === o.mecanicoId) ?? persona(o.mecanicoId);
@@ -68,6 +75,8 @@ export default async function PaginaOrden({ params }: { params: Promise<{ id: st
       <div className="flex gap-4 items-start flex-wrap">
         <div className="flex-[2_1_560px] min-w-0 flex flex-col gap-3.5">
           <Motivo ordenId={o.id} motivo={o.motivo} soloLectura={cerrada} />
+          <ManoObra key={`${o.id}-${o.version}-${revisionTiempos(tiempos.tramos)}`} ordenId={o.id} tramos={tiempos.tramos} disponible={tiempos.disponible} linea={o.trabajos.find((t) => t.manoObra)} cerrada={cerrada} />
+          <FotosOrden ordenId={o.id} demo={Boolean((await cookies()).get('tr_demo_persona')?.value)} editable={!cerrada} />
           <Trabajos
             ordenId={o.id}
             trabajos={o.trabajos.map(vistaTrabajo)}
@@ -81,6 +90,7 @@ export default async function PaginaOrden({ params }: { params: Promise<{ id: st
         </div>
 
         <aside className="flex-[1_1_300px] min-w-[280px] flex flex-col gap-3.5">
+          <TiempoTrabajo ordenId={o.id} tramos={tiempos.tramos} disponible={tiempos.disponible} nombres={Object.fromEntries(trabajadores.map((p) => [p.id, p.nombre]))} />
           <div className="tarjeta px-5 py-[18px] flex flex-col gap-1.5">
             <TituloSeccion className="mb-1">Cliente</TituloSeccion>
             <div className="text-[17px] font-bold">{cliente.nombre}</div>

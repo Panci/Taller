@@ -56,7 +56,7 @@ function FilaTrabajo({ t, soloLectura, editar }: { t: TrabajoVista; soloLectura:
         {t.precio === null
           ? <span className="text-sm font-bold text-rojo whitespace-nowrap">Precio a poner</span>
           : <span className="text-[15px] tabular-nums whitespace-nowrap font-semibold">{eur(t.precio)}</span>}
-        {!soloLectura && (
+        {!soloLectura && !t.manoObra && (
           <button type="button" onClick={editar} className="btn-texto text-[13px] underline-offset-2 hover:underline">
             {t.precio === null ? 'Poner precio' : 'Editar'}
           </button>

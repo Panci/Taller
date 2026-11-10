@@ -1,9 +1,11 @@
-import { dbSesion, exigirVista } from '@/lib/sesion';
+import { dbSesion, exigirVista, esSesionDemo } from '@/lib/sesion';
 import {
   leerDatosTaller,
   leerConfiguracionIA,
   leerTrabajadoresTaller,
   leerConfiguracionWhatsApp,
+  CONFIG_IA_DEFECTO,
+  CONFIG_WHATSAPP_DEFECTO,
 } from '@/lib/ajustes';
 import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
 import { PanelConfiguracion } from '@/components/configuracion/panel';
@@ -13,13 +15,14 @@ export const dynamic = 'force-dynamic';
 export default async function PaginaConfiguracion() {
   await exigirVista('configuracion');
   const db = await dbSesion();
+  const demo = await esSesionDemo();
 
   const [taller, configIA, trabajadores, iaActiva, configWhatsApp] = await Promise.all([
     leerDatosTaller(db),
-    leerConfiguracionIA(db),
+    demo ? CONFIG_IA_DEFECTO : leerConfiguracionIA(db),
     leerTrabajadoresTaller(db),
     iaConfiguradaAsync(),
-    leerConfiguracionWhatsApp(db),
+    demo ? CONFIG_WHATSAPP_DEFECTO : leerConfiguracionWhatsApp(db),
   ]);
 
   return (
@@ -34,10 +37,10 @@ export default async function PaginaConfiguracion() {
       <PanelConfiguracion
         key={`${taller.nombre}-${trabajadores.map((t) => `${t.id}:${t.nombre}:${t.nombreCompleto}`).join(',')}-${configWhatsApp.activo}`}
         datosTallerInicial={taller}
-        configIAInicial={configIA}
+        configIAInicial={{ ...configIA, apiKey: '' }}
         trabajadoresInicial={trabajadores}
         iaActivaInicial={iaActiva}
-        configWhatsAppInicial={configWhatsApp}
+        configWhatsAppInicial={{ ...configWhatsApp, token: '', verifyToken: '' }}
       />
     </main>
   );

@@ -14,6 +14,9 @@ import { eur } from '@/lib/formato';
 import type { OrigenIA, Propuesta, ServicioTarifa } from '@/lib/tipos';
 import type { ObservacionVista, PiezaVista, TrabajoVista } from '@/lib/vistas';
 import { aWav, mensajeMicrofono, useGrabadora } from './audio';
+import { TiempoTrabajo } from '@/components/tiempo-trabajo';
+import type { Tramo } from '@/lib/tiempos';
+import { FotosOrden } from '@/components/fotos-orden';
 import { contarCambios, limpiarPropuesta, nuevaClave, problemaEdicion, Revision, type OrdenMovil } from './revision';
 
 export interface DatosFichaMovil extends Omit<OrdenMovil, 'trabajos' | 'piezas'> {
@@ -37,8 +40,9 @@ type Fase =
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const horaAhora = () => new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
 
-export function FichaMovil({ yo, orden, tarifa, iaLista }: {
-  yo: { nombre: string }; orden: DatosFichaMovil; tarifa: ServicioTarifa[]; iaLista: boolean;
+export function FichaMovil({ yo, orden, tarifa, iaLista, tiempos, demo }: {
+  yo: { nombre: string; id: string }; orden: DatosFichaMovil; tarifa: ServicioTarifa[]; iaLista: boolean;
+  tiempos: { tramos: Tramo[]; disponible: boolean }; demo: boolean;
 }) {
   const router = useRouter();
   const avisar = useAvisos();
@@ -253,6 +257,9 @@ export function FichaMovil({ yo, orden, tarifa, iaLista }: {
           <div className="text-[15px] text-t3">{orden.kmTexto} · {orden.dias}</div>
           <div className="text-[15px] text-t3">Cliente: {orden.cliente}</div>
         </div>
+
+        <TiempoTrabajo ordenId={orden.id} tramos={tiempos.tramos} disponible={tiempos.disponible} mecanicoId={yo.id} />
+        <FotosOrden ordenId={orden.id} demo={demo} editable />
 
         <div className="bg-white border border-borde rounded-[14px] px-[18px] py-4 flex flex-col gap-1.5">
           <span className="titulo-seccion">Motivo de entrada</span>

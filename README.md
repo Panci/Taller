@@ -40,7 +40,11 @@ Abre http://localhost:5678 y entra con tu usuario: `paco`, `lucia`, `javi`, `rub
 
 **Probar asistente** (solo Paco): una pestaña en la que Paco escribe como si fuera un cliente, con el mismo chat y la misma IA que `/chat`. Esos chats salen en Conversaciones con la etiqueta «Prueba», no avisan a recepción como pendientes y las citas que se reservan en ellos no se guardan.
 
+**Fotos de la reparación:** desde la ficha del mecánico o de la orden se pueden añadir hasta 10 fotos con una descripción. Aparecen en el informe imprimible del cliente. En la demo instantánea se guardan únicamente en el navegador que las añadió; para compartirlas entre dispositivos se necesita una sesión real y la migración de fotos aplicada en Supabase. La migración crea un almacén privado y sus reglas de acceso. Las imágenes se reducen y se convierten a JPEG antes de guardarse.
+
 ## 3. Base de datos
+
+El webhook de WhatsApp requiere `WHATSAPP_APP_SECRET` con el secreto de la aplicación de Meta para verificar las firmas de las notificaciones entrantes. Sin ese valor se rechazan los mensajes entrantes.
 
 - El esquema está en `supabase/migrations` (tablas, reglas de seguridad y funciones), aplicado ya en el proyecto «Taller».
 - Cada orden guarda dentro sus trabajos, piezas, observaciones e historial. Un cambio en una orden se guarda de una vez (todo o nada) y, si dos personas la tocan a la vez, no se pisan.

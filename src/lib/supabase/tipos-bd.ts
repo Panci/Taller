@@ -8,6 +8,14 @@ export type Database = {
   __InternalSupabase: { PostgrestVersion: '14.5' };
   public: {
     Tables: {
+      fotos_orden: Tabla<
+        { id: string; orden_id: string; ruta: string; descripcion: string; creada: string },
+        { id: string; orden_id: string; ruta: string; descripcion?: string; creada?: string }
+      >;
+      tiempos_trabajo: Tabla<
+        { id: number; orden_id: string; mecanico_id: string; inicio: string; fin: string | null },
+        { id?: number; orden_id: string; mecanico_id: string; inicio?: string; fin?: string | null }
+      >;
       ajustes: Tabla<
         { actualizado: string; clave: string; valor: Json },
         { actualizado?: string; clave: string; valor: Json }
@@ -69,6 +77,7 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      cambiar_trabajo_activo: { Args: { p_orden: string | null; p_esperada: string | null }; Returns: undefined };
       asistente_orden: { Args: { p_codigo: string; p_matriculas: string[] }; Returns: Json };
       crear_trabajador: {
         Args: {

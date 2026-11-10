@@ -19,12 +19,13 @@ export interface TrabajoVista {
   cuando: string;
   ia?: OrigenIA;
   reciente: boolean;
+  manoObra?: boolean;
 }
 
 export function vistaTrabajo(t: Trabajo): TrabajoVista {
   return {
     id: t.id, descripcion: t.descripcion, precio: t.precio, origen: t.origen, cantidad: t.cantidad, hechoPor: t.hechoPor,
-    hechoPorNombre: nombrePersona(t.hechoPor), cuando: fmtSello(t.cuando), ia: t.ia, reciente: reciente(t.ia, t.cuando),
+    hechoPorNombre: nombrePersona(t.hechoPor), cuando: fmtSello(t.cuando), ia: t.ia, reciente: reciente(t.ia, t.cuando), manoObra: Boolean(t.manoObra),
   };
 }
 

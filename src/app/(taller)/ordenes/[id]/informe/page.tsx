@@ -9,6 +9,7 @@ import { firmaInforme } from '@/lib/ia/informe';
 import { leerDatosTaller } from '@/lib/ajustes';
 import { iaConfiguradaAsync } from '@/lib/ia/openrouter';
 import { VistaInforme, type DatosInforme } from '@/components/informe/vista';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,5 +60,5 @@ export default async function PaginaInforme({ params, searchParams }: {
     firmaActual: firmaInforme(o),
   };
 
-  return <VistaInforme key={`${o.id}-${version}`} version={version} datos={datos} iaLista={iaLista} />;
+  return <VistaInforme key={`${o.id}-${version}`} version={version} datos={datos} iaLista={iaLista} demo={Boolean((await cookies()).get('tr_demo_persona')?.value)} />;
 }

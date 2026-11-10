@@ -26,6 +26,10 @@ async function personaDemo(): Promise<Persona | null> {
   }
 }
 
+export async function esSesionDemo(): Promise<boolean> {
+  return (await personaDemo()) !== null;
+}
+
 export const personaActual = cache(async (): Promise<Persona | null> => {
   const demo = await personaDemo();
   if (demo) return demo;

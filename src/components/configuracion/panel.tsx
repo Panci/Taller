@@ -899,7 +899,7 @@ export function PanelConfiguracion({
             <div>
               <h2 className="text-xl font-bold m-0">Clave de API de OpenRouter</h2>
               <p className="text-sm text-t2 mt-1 mb-0">
-                La clave se almacena de forma segura en el servidor y nunca se comparte con el navegador de los clientes.
+                Deja la clave vacía para conservar la que ya está configurada.
               </p>
             </div>
 
@@ -1157,7 +1157,7 @@ export function PanelConfiguracion({
                     </button>
                   </div>
                   <span className="text-xs text-t2 mt-1 block">
-                    Pega este mismo texto en el campo <i>Token de verificación</i> de Meta.
+                    Introduce un token nuevo para cambiarlo; deja el campo vacío para conservar el actual.
                   </span>
                 </label>
               </div>

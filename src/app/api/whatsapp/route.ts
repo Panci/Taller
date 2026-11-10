@@ -1,5 +1,6 @@
 import { leerConfiguracionWhatsApp } from '@/lib/ajustes';
 import { procesarMensajeWhatsAppEntrante } from '@/lib/whatsapp';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const maxDuration = 90;
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       });
     }
 
-    console.warn('[WhatsApp Webhook GET] Verificación rechazada. Token recibido:', token, 'Esperado:', tokenEsperado);
+    console.warn('[WhatsApp Webhook GET] Verificación rechazada.');
     return new Response('Forbidden', { status: 403 });
   } catch (error) {
     console.error('[WhatsApp Webhook GET Error]', error);
@@ -41,7 +42,16 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => null)) as {
+    const secreto = process.env.WHATSAPP_APP_SECRET?.trim();
+    const firma = request.headers.get('x-hub-signature-256') ?? '';
+    const raw = await request.text();
+    if (!secreto || !/^sha256=[a-f0-9]{64}$/i.test(firma)) return new Response('Forbidden', { status: 403 });
+    const esperada = createHmac('sha256', secreto).update(raw).digest();
+    const recibida = Buffer.from(firma.slice(7), 'hex');
+    if (recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) return new Response('Forbidden', { status: 403 });
+    let json: unknown;
+    try { json = JSON.parse(raw); } catch { json = null; }
+    const body = json as {
       object?: string;
       entry?: Array<{
         changes?: Array<{

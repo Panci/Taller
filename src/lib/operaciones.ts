@@ -309,6 +309,7 @@ export async function editarTrabajo(db: Db, id: string, trabajoId: string,
     exigirAbierta(o);
     const t = o.trabajos.find((x) => x.id === trabajoId);
     if (!t) throw new ErrorNegocio('Ese trabajo ya no está en la orden.');
+    if (t.manoObra) throw new ErrorNegocio('Edita la mano de obra desde su apartado de revisión.');
     const cambios: string[] = [];
     if (d.descripcion !== undefined) {
       const desc = limpio(d.descripcion);
@@ -340,8 +341,42 @@ export async function borrarTrabajo(db: Db, id: string, trabajoId: string, actor
     exigirAbierta(o);
     const t = o.trabajos.find((x) => x.id === trabajoId);
     if (!t) return;
+    if (t.manoObra) throw new ErrorNegocio('Edita la mano de obra desde su apartado de revisión.');
     o.trabajos = o.trabajos.filter((x) => x.id !== trabajoId);
     anotar(o, actor.nombre, `Trabajo quitado: ${t.descripcion} · ${precioTexto(t.precio)}.`);
+  });
+}
+
+export async function aprobarManoObra(db: Db, id: string, actor: Persona, d: {
+  horas: number; tarifa: number; importe: number; segundosRegistrados: number; revisionTiempos: string;
+}): Promise<void> {
+  if (!Number.isFinite(d.horas) || d.horas < 0 || d.horas > 10000) throw new ErrorNegocio('Las horas no son válidas.');
+  const tarifa = validarPrecio(d.tarifa);
+  const importe = validarPrecio(d.importe);
+  if (tarifa === null || importe === null) throw new ErrorNegocio('Indica la tarifa y el importe.');
+  await cambiarOrden(db, id, (o) => {
+    exigirAbierta(o);
+    const momento = ahora();
+    const datos = { horas: d.horas, tarifa, segundosRegistrados: d.segundosRegistrados, revisionTiempos: d.revisionTiempos, aprobadoPor: actor.nombre, aprobadoEn: momento };
+    let linea = o.trabajos.find((t) => t.manoObra);
+    if (!linea) {
+      linea = { id: nuevoId('tr'), descripcion: 'Mano de obra', precio: importe, origen: 'mano', cantidad: 1, hechoPor: o.mecanicoId, cuando: momento, manoObra: datos };
+      o.trabajos.push(linea);
+    } else {
+      linea.precio = importe;
+      linea.manoObra = datos;
+    }
+    anotar(o, actor.nombre, `Mano de obra revisada: ${d.horas} h · ${eur(tarifa)}/h · importe aprobado ${eur(importe)}.`);
+  });
+}
+
+export async function quitarManoObra(db: Db, id: string, actor: Persona): Promise<void> {
+  await cambiarOrden(db, id, (o) => {
+    exigirAbierta(o);
+    const linea = o.trabajos.find((t) => t.manoObra);
+    if (!linea) return;
+    o.trabajos = o.trabajos.filter((t) => !t.manoObra);
+    anotar(o, actor.nombre, `Mano de obra retirada del total (${precioTexto(linea.precio)}).`);
   });
 }
 

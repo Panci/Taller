@@ -12,6 +12,7 @@ import {
   guardarHorarioTaller,
   guardarDatosTaller,
   guardarConfiguracionIA,
+  leerConfiguracionIA,
   guardarTrabajadorTaller,
   eliminarTrabajadorTaller,
   guardarConfiguracionWhatsApp,
@@ -22,7 +23,7 @@ import {
 } from '@/lib/ajustes';
 import { enviarMensajeWhatsApp } from '@/lib/whatsapp';
 import { probarConexionOpenRouter } from '@/lib/ia/openrouter';
-import { dbSesion, personaActual } from '@/lib/sesion';
+import { dbSesion, personaActual, esSesionDemo } from '@/lib/sesion';
 import { puedeEditarTarifa, puedeTocarOrden } from '@/lib/permisos';
 import { cochePorMatricula, leerConversacion, leerOrden, leerTarifa, ordenAbiertaDe } from '@/lib/datos';
 import { servicioDe } from '@/lib/calculos';
@@ -30,6 +31,8 @@ import { aNumero } from '@/lib/formato';
 import { firmaInforme } from '@/lib/ia/informe';
 import type { Db } from '@/lib/supabase/servidor';
 import * as op from '@/lib/operaciones';
+import { cambiarTiempo, detenerTiempoDemoOrden, leerTiempos } from '@/lib/tiempos';
+import { revisionTiempos, segundosTramo } from '@/lib/duracion';
 
 type Permiso = (actor: Persona, db: Db) => boolean | Promise<boolean>;
 
@@ -121,9 +124,11 @@ export async function cambiarEstadoAccion(ordenId: string, estado: EstadoId): Pr
 
 export async function guardarDatosOrdenAccion(ordenId: string, d: { motivo?: string; km?: string; mecanicoId?: PersonaId }): Promise<Resultado> {
   return ejecutar(sobreOrden(ordenId), async (actor, db) => {
+    const anterior = d.mecanicoId ? await leerOrden(db, ordenId) : null;
     const km = d.km === undefined ? undefined : aNumero(d.km);
     if (d.km !== undefined && km === null) throw new op.ErrorNegocio('Los kilómetros no son válidos.');
     const n = await op.editarDatosOrden(db, ordenId, { motivo: d.motivo, km: km ?? undefined, mecanicoId: d.mecanicoId }, actor);
+    if (anterior && d.mecanicoId !== anterior.mecanicoId) await detenerTiempoDemoOrden(ordenId);
     return n ? 'Orden guardada.' : 'No había cambios.';
   });
 }
@@ -202,7 +207,43 @@ export async function borrarObservacionAccion(ordenId: string, obsId: string): P
 export async function cerrarOrdenAccion(ordenId: string): Promise<Resultado> {
   return ejecutar(esEscritorio, async (actor, db) => {
     await op.cerrarOrden(db, ordenId, actor);
+    await detenerTiempoDemoOrden(ordenId);
     return `Orden ${ordenId} cerrada. Pasa al historial del coche.`;
+  });
+}
+
+export async function cambiarTiempoAccion(ordenId: string, activar: boolean): Promise<Resultado> {
+  return ejecutar(sobreOrden(ordenId), async (actor, db) => {
+    if (actor.rol !== 'mecanico') throw new op.ErrorNegocio('Solo el mecánico asignado puede registrar su tiempo.');
+    const orden = await leerOrden(db, ordenId);
+    if (!orden || orden.mecanicoId !== actor.id || orden.estado === 'entregado') throw new op.ErrorNegocio('La orden no está abierta o no está asignada a este mecánico.');
+    await cambiarTiempo(db, actor.id, activar ? ordenId : null, activar ? null : ordenId);
+    revalidatePath('/movil', 'layout');
+    revalidatePath('/ordenes', 'layout');
+    return activar ? 'Trabajo iniciado.' : 'Trabajo pausado.';
+  });
+}
+
+export async function aprobarManoObraAccion(ordenId: string, d: { horas: string; tarifa: string; importe: string; revision: string }): Promise<Resultado> {
+  return ejecutar(esEscritorio, async (actor, db) => {
+    const horas = aNumero(d.horas), tarifa = aNumero(d.tarifa), importe = aNumero(d.importe);
+    if (horas === null || tarifa === null || importe === null) throw new op.ErrorNegocio('Indica las horas, la tarifa y el importe.');
+    const tramos = await leerTiempos(db, ordenId);
+    if (!tramos.length) throw new op.ErrorNegocio('No hay tiempo registrado para esta orden.');
+    if (tramos.some((t) => !t.fin)) throw new op.ErrorNegocio('Pausa todos los relojes antes de aprobar la mano de obra.');
+    if (revisionTiempos(tramos) !== d.revision) throw new op.ErrorNegocio('Los tiempos han cambiado. Recarga la orden y revísalos antes de aprobar.');
+    const segundosRegistrados = tramos.reduce((s, t) => s + segundosTramo(t.inicio, t.fin, 0), 0);
+    await op.aprobarManoObra(db, ordenId, actor, { horas, tarifa, importe, segundosRegistrados, revisionTiempos: d.revision });
+    revalidatePath(`/ordenes/${ordenId}`);
+    return 'Mano de obra aprobada e incluida en el total de la orden.';
+  });
+}
+
+export async function quitarManoObraAccion(ordenId: string): Promise<Resultado> {
+  return ejecutar(esEscritorio, async (actor, db) => {
+    await op.quitarManoObra(db, ordenId, actor);
+    revalidatePath(`/ordenes/${ordenId}`);
+    return 'Mano de obra retirada del total.';
   });
 }
 
@@ -300,7 +341,9 @@ export async function guardarDatosTallerAccion(datos: DatosTaller): Promise<Resu
 
 export async function guardarConfiguracionIAAccion(config: ConfiguracionIA): Promise<Resultado> {
   return ejecutar(esDueno, async (_a, db) => {
-    const r = await guardarConfiguracionIA(db, config);
+    if (await esSesionDemo()) return { ok: false, error: 'La configuración de conexiones no está disponible en la demostración.' };
+    const anterior = await leerConfiguracionIA(db);
+    const r = await guardarConfiguracionIA(db, { ...config, apiKey: config.apiKey.trim() || anterior.apiKey });
     return {
       ok: true,
       mensaje: r.enBd
@@ -312,6 +355,7 @@ export async function guardarConfiguracionIAAccion(config: ConfiguracionIA): Pro
 
 export async function probarClaveIAAccion(apiKey: string): Promise<Resultado> {
   return ejecutar(esDueno, async () => {
+    if (await esSesionDemo()) return { ok: false, error: 'La configuración de conexiones no está disponible en la demostración.' };
     const r = await probarConexionOpenRouter(apiKey);
     if (!r.ok) return { ok: false, error: r.mensaje };
     return { ok: true, mensaje: r.mensaje };
@@ -394,7 +438,9 @@ export async function cambiarClaveTrabajadorAccion(personaId: string, clave: str
 
 export async function guardarConfiguracionWhatsAppAccion(config: ConfiguracionWhatsApp): Promise<Resultado> {
   return ejecutar(esDueno, async (_a, db) => {
-    const r = await guardarConfiguracionWhatsApp(db, config);
+    if (await esSesionDemo()) return { ok: false, error: 'La configuración de conexiones no está disponible en la demostración.' };
+    const anterior = await leerConfiguracionWhatsApp(db);
+    const r = await guardarConfiguracionWhatsApp(db, { ...config, token: config.token.trim() || anterior.token, verifyToken: config.verifyToken.trim() || anterior.verifyToken });
     return {
       ok: true,
       mensaje: r.enBd
@@ -406,6 +452,7 @@ export async function guardarConfiguracionWhatsAppAccion(config: ConfiguracionWh
 
 export async function probarEnvioWhatsAppAccion(telefono: string, texto: string): Promise<Resultado> {
   return ejecutar(esDueno, async (_a, db) => {
+    if (await esSesionDemo()) return { ok: false, error: 'No se envían mensajes reales desde la demostración.' };
     const r = await enviarMensajeWhatsApp(telefono, texto, undefined, db);
     if (!r.ok) return { ok: false, error: r.error || 'Error al enviar el mensaje de prueba.' };
     return { ok: true, mensaje: `¡Mensaje enviado con éxito por WhatsApp! ID: ${r.messageId || 'OK'}` };
@@ -437,7 +484,7 @@ export async function enviarMensajeAccion(conversacionId: string, textoMensaje: 
     await op.mensajeDelTaller(db, conversacionId, textoMensaje);
     try {
       const conv = await leerConversacion(db, conversacionId);
-      if (conv && conv.canal === 'WhatsApp' && conv.contacto) {
+      if (!(await esSesionDemo()) && conv && conv.canal === 'WhatsApp' && conv.contacto) {
         const cfg = await leerConfiguracionWhatsApp(db);
         if (cfg.activo) {
           await enviarMensajeWhatsApp(conv.contacto, textoMensaje, cfg, db);

@@ -10,6 +10,7 @@ import { guardarInformeAccion } from '@/app/acciones';
 import { useAccion, useAvisos } from '@/components/avisos';
 import { eur } from '@/lib/formato';
 import type { InformeCliente, InformeInterno } from '@/lib/tipos';
+import { FotosOrden } from '@/components/fotos-orden';
 
 export interface DatosInforme {
   ordenId: string;
@@ -38,7 +39,7 @@ const Etiqueta = ({ children, roja = false }: { children: ReactNode; roja?: bool
   <span className={`text-[11px] font-bold tracking-[.08em] uppercase ${roja ? 'text-rojo' : 'text-t2'}`}>{children}</span>
 );
 
-export function VistaInforme({ version, datos, iaLista }: { version: 'cliente' | 'interno'; datos: DatosInforme; iaLista: boolean }) {
+export function VistaInforme({ version, datos, iaLista, demo }: { version: 'cliente' | 'interno'; datos: DatosInforme; iaLista: boolean; demo: boolean }) {
   const router = useRouter();
   const avisar = useAvisos();
   const { pendiente: guardando, ejecutar } = useAccion();
@@ -258,6 +259,8 @@ export function VistaInforme({ version, datos, iaLista }: { version: 'cliente' |
           </div>
           <div className="text-right text-xs text-t2 mt-0.5">IVA incluido{datos.sinPrecio > 0 ? ` · sin contar ${datos.sinPrecio === 1 ? '1 trabajo pendiente' : `${datos.sinPrecio} trabajos pendientes`} de precio` : ''}</div>
         </div>
+
+        <FotosOrden ordenId={datos.ordenId} demo={demo} informe />
 
         {version === 'cliente' && datos.recomendaciones.length > 0 && (
           <div className="flex flex-col gap-2 bg-papel border border-gris rounded-md px-[18px] py-4">

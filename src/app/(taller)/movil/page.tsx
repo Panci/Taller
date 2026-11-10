@@ -4,6 +4,7 @@ import { conCocheYCliente, ordenesAbiertas } from '@/lib/datos';
 import { diasEnTaller, etiquetaDias, fmtDiaLargo, hoy } from '@/lib/fechas';
 import { EstadoPill, Matricula } from '@/components/ui';
 import type { EstadoOrden } from '@/lib/tipos';
+import { leerTiempos } from '@/lib/tiempos';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export default async function MisCoches() {
   const mias = (await conCocheYCliente(db, (await ordenesAbiertas(db)).filter((o) => o.mecanicoId === yo.id)))
     .sort((a, b) => PRIORIDAD[a.orden.estado] - PRIORIDAD[b.orden.estado] || a.orden.entrada.localeCompare(b.orden.entrada));
   const fecha = fmtDiaLargo(hoy());
+  const activos = await leerTiempos(db).then((ts) => new Set(ts.filter((t) => t.mecanico_id === yo.id && !t.fin).map((t) => t.orden_id))).catch(() => new Set<string>());
 
   return (
     <div className="px-4 pt-3 pb-8 flex flex-col gap-3">
@@ -31,6 +33,7 @@ export default async function MisCoches() {
               <span className="text-[30px] text-t5 leading-none">›</span>
             </div>
             <div className="text-[17px] font-bold">{coche.modelo}</div>
+            {activos.has(o.id) && <span className="text-sm font-semibold text-green-700">● Trabajo en marcha</span>}
             <div className="text-[15px] text-t3 leading-[1.4]">{o.motivo}</div>
             <div className="flex justify-between items-center">
               <EstadoPill estado={o.estado} tam="movil" />
